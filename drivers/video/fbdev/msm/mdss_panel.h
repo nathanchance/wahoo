@@ -278,6 +278,7 @@ struct mdss_intf_ulp_clamp {
  *			avr mode passed as argument
  *			0 - disable AVR support
  *			1 - enable AVR support
+ * @MDSS_EVENT_ENABLE_HBM: Enable "High Brightness Mode" feature on panel
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -315,6 +316,7 @@ enum mdss_intf_events {
 	MDSS_EVENT_AVR_MODE,
 	MDSS_EVENT_REGISTER_CLAMP_HANDLER,
 	MDSS_EVENT_MAX,
+	MDSS_EVENT_ENABLE_HBM,
 };
 
 /**
@@ -936,6 +938,10 @@ struct mdss_panel_info {
 
 	/* esc clk recommended for the panel */
 	u32 esc_clk_rate_hz;
+
+	/* HBM */
+	bool hbm_feature_enabled;
+	bool hbm_state;
 };
 
 struct mdss_panel_timing {
