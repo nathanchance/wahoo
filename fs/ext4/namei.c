@@ -1613,13 +1613,15 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 			int nokey = ext4_encrypted_inode(inode) &&
 				!ext4_encryption_info(inode);
 
-			iput(inode);
-			if (nokey)
+			if (nokey) {
+				iput(inode);
 				return ERR_PTR(-ENOKEY);
+			}
 			ext4_warning(inode->i_sb,
 				     "Inconsistent encryption contexts: %lu/%lu\n",
 				     (unsigned long) dir->i_ino,
 				     (unsigned long) inode->i_ino);
+			iput(inode);
 			return ERR_PTR(-EPERM);
 		}
 	}
