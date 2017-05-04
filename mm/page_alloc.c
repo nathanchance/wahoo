@@ -1046,6 +1046,13 @@ static bool free_pages_prepare(struct page *page, unsigned int order)
 		debug_check_no_obj_freed(page_address(page),
 					   PAGE_SIZE << order);
 	}
+
+	if (IS_ENABLED(CONFIG_PAGE_SANITIZE)) {
+		int i;
+		for (i = 0; i < (1 << order); i++)
+			clear_highpage(page + i);
+	}
+
 	arch_free_page(page, order);
 	kernel_map_pages(page, 1 << order, 0);
 	kasan_free_pages(page, order);
@@ -1459,7 +1466,7 @@ static int prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
 	arch_alloc_page(page, order);
 	kernel_map_pages(page, 1 << order, 1);
 
-	if (gfp_flags & __GFP_ZERO)
+	if (!IS_ENABLED(CONFIG_PAGE_SANITIZE) && (gfp_flags & __GFP_ZERO))
 		for (i = 0; i < (1 << order); i++)
 			clear_highpage(page + i);
 
