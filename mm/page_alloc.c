@@ -1466,6 +1466,11 @@ static int prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
 	arch_alloc_page(page, order);
 	kernel_map_pages(page, 1 << order, 1);
 
+	if (IS_ENABLED(CONFIG_PAGE_SANITIZE_VERIFY)) {
+		for (i = 0; i < (1 << order); i++)
+			verify_zero_highpage(page + i);
+	}
+
 	if (!IS_ENABLED(CONFIG_PAGE_SANITIZE) && (gfp_flags & __GFP_ZERO))
 		for (i = 0; i < (1 << order); i++)
 			clear_highpage(page + i);
