@@ -2250,6 +2250,7 @@ static int parse_qos_dt_params(struct device_node *node,
 		einfo->ramp_time_us[i] = arr32[i];
 
 	rc = 0;
+	kfree(arr32);
 	return rc;
 
 invalid_key:
