@@ -1553,7 +1553,8 @@ static void schedtune_dequeue_rt(struct rq *rq, struct task_struct *p)
 }
 
 static int
-select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
+select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags,
+		  int sibling_count_hint)
 {
 	struct task_struct *curr, *tgt_task;
 	struct rq *rq;
