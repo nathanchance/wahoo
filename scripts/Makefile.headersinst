@@ -21,6 +21,13 @@ ifneq ($(wildcard $(old-kbuild-file)),)
 include $(old-kbuild-file)
 endif
 
+PHONY += __headersinst __headerscheck
+ifndef HDRCHECK
+__headersinst:
+else
+__headerscheck:
+endif
+
 include scripts/Kbuild.include
 
 installdir    := $(INSTALL_HDR_PATH)/$(subst uapi/,,$(_dst))
@@ -97,8 +104,6 @@ quiet_cmd_check = CHECK   $(printdir) ($(words $(all-files)) files)
                   | xargs                                            \
                   $(PERL) $< $(INSTALL_HDR_PATH)/include $(SRCARCH); \
 	          touch $@
-
-PHONY += __headersinst __headerscheck
 
 ifndef HDRCHECK
 # Rules for installing headers
