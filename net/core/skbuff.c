@@ -3704,14 +3704,13 @@ void skb_complete_tx_timestamp(struct sk_buff *skb,
 	if (!skb_may_tx_timestamp(sk, false))
 		return;
 
-	/* Take a reference to prevent skb_orphan() from freeing the socket,
-	 * but only if the socket refcount is not zero.
-	 */
-	if (likely(atomic_inc_not_zero(&sk->sk_refcnt))) {
-		*skb_hwtstamps(skb) = *hwtstamps;
-		__skb_complete_tx_timestamp(skb, sk, SCM_TSTAMP_SND);
-		sock_put(sk);
-	}
+	/* take a reference to prevent skb_orphan() from freeing the socket */
+	sock_hold(sk);
+
+	*skb_hwtstamps(skb) = *hwtstamps;
+	__skb_complete_tx_timestamp(skb, sk, SCM_TSTAMP_SND);
+
+	sock_put(sk);
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
@@ -3762,7 +3761,7 @@ void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
 {
 	struct sock *sk = skb->sk;
 	struct sock_exterr_skb *serr;
-	int err = 1;
+	int err;
 
 	skb->wifi_acked_valid = 1;
 	skb->wifi_acked = acked;
@@ -3772,15 +3771,14 @@ void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
 	serr->ee.ee_errno = ENOMSG;
 	serr->ee.ee_origin = SO_EE_ORIGIN_TXSTATUS;
 
-	/* Take a reference to prevent skb_orphan() from freeing the socket,
-	 * but only if the socket refcount is not zero.
-	 */
-	if (likely(atomic_inc_not_zero(&sk->sk_refcnt))) {
-		err = sock_queue_err_skb(sk, skb);
-		sock_put(sk);
-	}
+	/* take a reference to prevent skb_orphan() from freeing the socket */
+	sock_hold(sk);
+
+	err = sock_queue_err_skb(sk, skb);
 	if (err)
 		kfree_skb(skb);
+
+	sock_put(sk);
 }
 EXPORT_SYMBOL_GPL(skb_complete_wifi_ack);
 
