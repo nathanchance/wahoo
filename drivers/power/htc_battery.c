@@ -1024,6 +1024,6 @@ static void __exit htc_battery_exit(void)
 	platform_driver_unregister(&htc_battery_driver);
 }
 
-module_init(htc_battery_init);
+late_initcall(htc_battery_init);
 module_exit(htc_battery_exit);
 MODULE_LICENSE("GPL");

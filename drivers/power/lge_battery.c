@@ -826,6 +826,6 @@ static struct kernel_param_ops demo_mode_ops = {
 module_param_cb(demo_mode, &demo_mode_ops, &demo_mode, 0644);
 MODULE_PARM_DESC(demo_mode, "VZW Demo mode <on|off>");
 
-module_init(lge_battery_init);
+late_initcall(lge_battery_init);
 module_exit(lge_battery_exit);
 MODULE_LICENSE("GPL");
