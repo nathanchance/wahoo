@@ -1054,6 +1054,6 @@ static void __exit htc_battery_exit(void)
 	BATT_LOG("%s done.\n", __func__);
 }
 
-module_init(htc_battery_init);
+late_initcall(htc_battery_init);
 module_exit(htc_battery_exit);
 MODULE_LICENSE("GPL");
