@@ -747,11 +747,6 @@ static int ramoops_parse_dt_size(struct platform_device *pdev,
 		return ret;
 	}
 
-	if (val64 > ULONG_MAX) {
-		dev_err(&pdev->dev, "invalid %s %llu\n", propname, val64);
-		return -EOVERFLOW;
-	}
-
 	*val = val64;
 	return 0;
 }

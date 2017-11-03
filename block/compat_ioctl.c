@@ -733,8 +733,6 @@ long compat_blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		return 0;
 	case BLKGETSIZE:
 		size = i_size_read(bdev->bd_inode);
-		if ((size >> 9) > ~0UL)
-			return -EFBIG;
 		return compat_put_ulong(arg, size >> 9);
 
 	case BLKGETSIZE64_32:

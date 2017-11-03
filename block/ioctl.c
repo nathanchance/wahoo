@@ -558,8 +558,6 @@ int blkdev_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 		return blkdev_reread_part(bdev);
 	case BLKGETSIZE:
 		size = i_size_read(bdev->bd_inode);
-		if ((size >> 9) > ~0UL)
-			return -EFBIG;
 		return put_ulong(arg, size >> 9);
 	case BLKGETSIZE64:
 		return put_u64(arg, i_size_read(bdev->bd_inode));

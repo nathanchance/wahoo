@@ -3334,9 +3334,6 @@ static struct file *__shmem_file_setup(const char *name, loff_t size,
 	if (IS_ERR(shm_mnt))
 		return ERR_CAST(shm_mnt);
 
-	if (size < 0 || size > MAX_LFS_FILESIZE)
-		return ERR_PTR(-EINVAL);
-
 	if (shmem_acct_size(flags, size))
 		return ERR_PTR(-ENOMEM);
 
