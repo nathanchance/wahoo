@@ -326,7 +326,7 @@ efi_status_t efi_parse_options(char *cmdline)
 		return EFI_SUCCESS;
 
 	/* Skip ahead to first argument */
-	str += strlen("efi=");
+	str += DSTRLEN("efi=");
 
 	/*
 	 * Remember, because efi= is also used by the kernel we need to
@@ -334,7 +334,7 @@ efi_status_t efi_parse_options(char *cmdline)
 	 */
 	while (*str) {
 		if (!strncmp(str, "nochunk", 7)) {
-			str += strlen("nochunk");
+			str += DSTRLEN("nochunk");
 			__chunk_size = -1UL;
 		}
 
