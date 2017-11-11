@@ -1295,12 +1295,6 @@ static int check_version(Elf_Shdr *sechdrs,
 	unsigned int i, num_versions;
 	struct modversion_info *versions;
 
-	if(!strncmp("htc_battery", mod->name, 11))
-		return 1;
-
-	if(!strncmp("lge_battery", mod->name, 11))
-		return 1;
-
 	/* Exporting module didn't supply crcs?  OK, we're already tainted. */
 	if (!crc)
 		return 1;
