@@ -157,6 +157,10 @@
 			29 01 00 00 00 00 03 F1 A5 A5
 		];
 		qcom,mdss-dsi-rgb-gain-offset = <2 1 2>;
+		qcom,mdss-dsi-hbm-on-command = [
+			15 01 00 00 00 00 02 53 e0];
+		qcom,mdss-dsi-hbm-off-command = [
+			15 01 00 00 00 00 02 53 20];
 	};
 	dsi_panel_pwr_supply_s6e3fa5: dsi_panel_pwr_supply_s6e3fa5 {
 		#address-cells = <1>;
