@@ -3107,7 +3107,7 @@ static int mdss_dp_event_thread(void *data)
 	ev_data = (struct mdss_dp_event_data *)data;
 
 	while (!kthread_should_stop()) {
-		wait_event(ev_data->event_q,
+		wait_event_interruptible(ev_data->event_q,
 			(ev_data->pndx != ev_data->gndx) ||
 			kthread_should_stop());
 		spin_lock_irqsave(&ev_data->event_lock, flag);
