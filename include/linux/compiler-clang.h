@@ -32,3 +32,6 @@
 	__attribute__((__section__(".text..ftrace")))
 #endif
 #endif
+
+#define randomized_struct_fields_start	struct {
+#define randomized_struct_fields_end	};
