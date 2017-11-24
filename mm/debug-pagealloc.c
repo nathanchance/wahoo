@@ -42,7 +42,7 @@ static inline void set_page_poison(struct page *page)
 	struct page_ext *page_ext;
 
 	page_ext = lookup_page_ext(page);
-	if (page_ext)
+	if (!page_ext)
 		return;
 	__set_bit(PAGE_EXT_DEBUG_POISON, &page_ext->flags);
 }
@@ -52,7 +52,7 @@ static inline void clear_page_poison(struct page *page)
 	struct page_ext *page_ext;
 
 	page_ext = lookup_page_ext(page);
-	if (page_ext)
+	if (!page_ext)
 		return;
 	__clear_bit(PAGE_EXT_DEBUG_POISON, &page_ext->flags);
 }
@@ -62,7 +62,7 @@ static inline bool page_poison(struct page *page)
 	struct page_ext *page_ext;
 
 	page_ext = lookup_page_ext(page);
-	if (page_ext)
+	if (!page_ext)
 		return false;
 	return test_bit(PAGE_EXT_DEBUG_POISON, &page_ext->flags);
 }
