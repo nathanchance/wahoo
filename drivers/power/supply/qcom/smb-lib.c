@@ -27,6 +27,10 @@
 #include "battery.h"
 #include "storm-watch.h"
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+#include <linux/fastcharge.h>
+#endif
+
 static void *smblib_ipc_log;
 
 #define smblib_err(chg, fmt, ...)				\
@@ -876,10 +880,10 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 	default_icl_ua = get_client_vote_locked(votable, DEFAULT_VOTER);
 	usb_icl_ua = get_client_vote_locked(votable, USB_PSY_VOTER);
 
-        // Force enable fast charge
-        if (usb_icl_ua == USBIN_500MA) {
-            usb_icl_ua = USBIN_900MA;
-        }
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	if (force_fast_charge && usb_icl_ua == USBIN_500MA)
+		usb_icl_ua = USBIN_900MA;
+#endif
 
 	/* PD and Type-C current */
 	if (pd_icl_ua > 0) {
