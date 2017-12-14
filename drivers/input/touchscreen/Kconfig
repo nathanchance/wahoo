@@ -1226,6 +1226,9 @@ config TOUCHSCREEN_ST
 
 	  If unsure, say N.
 
+config WAKE_GESTURES
+        bool "Wake Gestures"
+
 source "drivers/input/touchscreen/st/Kconfig"
 
 endif
