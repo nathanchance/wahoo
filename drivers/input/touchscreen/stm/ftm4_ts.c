@@ -55,6 +55,10 @@
 #include <linux/trustedui.h>
 #endif
 
+#ifdef CONFIG_WAKE_GESTURES
+#include <linux/wake_gestures.h>
+#endif
+
 #ifdef CONFIG_OF
 #ifndef USE_OPEN_CLOSE
 #define USE_OPEN_CLOSE
@@ -98,6 +102,15 @@ static int fts_resume(struct i2c_client *client);
 #if defined(CONFIG_FB)
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data);
+#endif
+
+#ifdef CONFIG_WAKE_GESTURES
+static bool suspended = false;
+
+bool scr_suspended_taimen(void)
+{
+	return suspended;
+}
 #endif
 
 static int fts_ts_get_property(struct power_supply *psy,
@@ -1055,6 +1068,10 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 						   MT_TOOL_FINGER,
 						   1 + (palm << 1));
 
+#ifdef CONFIG_WAKE_GESTURES
+			if (suspended)
+				x += 5000;
+#endif
 			input_report_key(info->input_dev, BTN_TOUCH, 1);
 			input_report_key(info->input_dev,
 					BTN_TOOL_FINGER, 1);
@@ -1918,7 +1935,11 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 	fts_production_init(info);
 #endif /* FEATURE_FTS_PRODUCTION_CODE */
+#ifdef CONFIG_WAKE_GESTURES
+	device_init_wakeup(&client->dev, true);
+#else
 	device_init_wakeup(&client->dev, false);
+#endif
 	if (device_may_wakeup(&info->client->dev))
 		enable_irq_wake(info->irq);
 	info->lowpower_mode = true;
@@ -2374,6 +2395,17 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 		return 0;
 	}
 
+#ifdef CONFIG_WAKE_GESTURES
+	if (wg_switch) {
+		mutex_lock(&info->device_mutex);
+		fts_command(info, FLUSHBUFFER);
+		fts_release_all_finger(info);
+		suspended = true;
+		mutex_unlock(&info->device_mutex);
+
+		return 0;
+	}
+#endif
 	fts_stop_device(info);
 
 	gpio_set_value(info->switch_gpio, 1);
@@ -2391,6 +2423,19 @@ static int fts_resume(struct i2c_client *client)
 
 	tsp_debug_info(&info->client->dev, "%s power state : %d\n",
 			__func__, info->fts_power_state);
+
+#ifdef CONFIG_WAKE_GESTURES
+	if (wg_switch) {
+		mutex_lock(&info->device_mutex);
+		fts_release_all_finger(info);
+		info->reinit_done = false;
+		fts_reinit(info);
+		info->reinit_done = true;
+		mutex_unlock(&info->device_mutex);
+
+		goto exit;
+	}
+#endif
 	/* if resume is called from active state, the i2c bus is not
 	 * switched to AP, skipping resume routine */
 	if (info->fts_power_state == FTS_POWER_STATE_ACTIVE) {
@@ -2407,6 +2452,16 @@ static int fts_resume(struct i2c_client *client)
 			gpio_get_value(info->switch_gpio));
 
 	fts_start_device(info);
+
+exit:
+#ifdef CONFIG_WAKE_GESTURES
+	if (wg_changed) {
+		wg_switch = wg_switch_temp;
+		wg_changed = false;
+	}
+
+	suspended = false;
+#endif
 
 	return 0;
 }
