@@ -294,6 +294,15 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 
 }
 
+void set_vibrate(int value)
+{
+	if (value > 0)	{
+		queue_work(drv2624_plat_data->drv2624_wq, &drv2624_plat_data->work);
+		msleep(value);
+		queue_work(drv2624_plat_data->drv2624_wq, &drv2624_plat_data->stop_work);
+	}
+}
+
 static void vibrator_work_routine(struct work_struct *work)
 {
 	struct drv2624_data *drv2624 =
