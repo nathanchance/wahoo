@@ -38,6 +38,9 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 #include <linux/i2c/i2c-msm-v2.h>
+#ifdef CONFIG_WAKE_GESTURES
+#include <linux/wake_gestures.h>
+#endif
 
 #ifdef DEBUG
 static const enum msm_i2_debug_level DEFAULT_DBG_LVL = MSM_DBG;
@@ -2770,6 +2773,11 @@ static int i2c_msm_pm_sys_suspend_noirq(struct device *dev)
 	ctrl->pwr_state = I2C_MSM_PM_SYS_SUSPENDED;
 	mutex_unlock(&ctrl->xfer.mtx);
 	i2c_msm_dbg(ctrl, MSM_DBG, "pm_sys_noirq: suspending...");
+
+#ifdef CONFIG_WAKE_GESTURES
+	if (wg_switch)
+		return ret;
+#endif
 
 	if (prev_state == I2C_MSM_PM_RT_ACTIVE) {
 		i2c_msm_pm_suspend(dev);
