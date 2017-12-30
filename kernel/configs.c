@@ -28,7 +28,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/init.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 /**************************************************/
 /* the actual current config file                 */
@@ -56,7 +56,7 @@
 
 static ssize_t
 ikconfig_read_current(struct file *file, char __user *buf,
-		      size_t len, loff_t * offset)
+		      size_t len, loff_t *offset)
 {
 	return simple_read_from_buffer(buf, len, offset,
 				       kernel_config_data + MAGIC_SIZE,

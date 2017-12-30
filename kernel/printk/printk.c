@@ -985,7 +985,7 @@ static int __init ignore_loglevel_setup(char *str)
 }
 
 early_param("ignore_loglevel", ignore_loglevel_setup);
-module_param(ignore_loglevel, bool, S_IRUGO | S_IWUSR);
+module_param(ignore_loglevel, bool, 0644);
 MODULE_PARM_DESC(ignore_loglevel,
 		 "ignore loglevel setting (prints all kernel messages to the console)");
 
@@ -1045,7 +1045,7 @@ static inline void boot_delay_msec(int level)
 #endif
 
 static bool printk_time = IS_ENABLED(CONFIG_PRINTK_TIME);
-module_param_named(time, printk_time, bool, S_IRUGO | S_IWUSR);
+module_param_named(time, printk_time, bool, 0644);
 
 static size_t print_time(u64 ts, char *buf)
 {
@@ -1064,10 +1064,10 @@ static size_t print_time(u64 ts, char *buf)
 }
 
 static bool printk_cpu = IS_ENABLED(CONFIG_PRINTK_CPU_ID);
-module_param_named(cpu, printk_cpu, bool, S_IRUGO | S_IWUSR);
+module_param_named(cpu, printk_cpu, bool, 0644);
 
 static bool printk_pid = IS_ENABLED(CONFIG_PRINTK_PID);
-module_param_named(pid, printk_pid, bool, S_IRUGO | S_IWUSR);
+module_param_named(pid, printk_pid, bool, 0644);
 
 static size_t print_cpu(unsigned int cpu, char *buf)
 {
@@ -2147,7 +2147,7 @@ static int __init console_suspend_disable(char *str)
 }
 __setup("no_console_suspend", console_suspend_disable);
 module_param_named(console_suspend, console_suspend_enabled,
-		bool, S_IRUGO | S_IWUSR);
+		bool, 0644);
 MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
 	" and hibernate operations");
 
@@ -2923,7 +2923,7 @@ int kmsg_dump_unregister(struct kmsg_dumper *dumper)
 EXPORT_SYMBOL_GPL(kmsg_dump_unregister);
 
 static bool always_kmsg_dump;
-module_param_named(always_kmsg_dump, always_kmsg_dump, bool, S_IRUGO | S_IWUSR);
+module_param_named(always_kmsg_dump, always_kmsg_dump, bool, 0644);
 
 /**
  * kmsg_dump - dump kernel log to kernel message dumpers.
