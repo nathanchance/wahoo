@@ -308,7 +308,7 @@ static __ref int do_sampling(void *data)
 	static int prev_temp[NR_CPUS];
 
 	while (!kthread_should_stop()) {
-		wait_for_completion_interruptible(&sampling_completion);
+		wait_for_completion(&sampling_completion);
 		cancel_delayed_work(&sampling_work);
 
 		mutex_lock(&kthread_update_mutex);
@@ -332,8 +332,7 @@ static __ref int do_sampling(void *data)
 		if (!poll_ms)
 			goto unlock;
 
-		queue_delayed_work(system_power_efficient_wq,
-			&sampling_work,
+		schedule_delayed_work(&sampling_work,
 			msecs_to_jiffies(poll_ms));
 unlock:
 		mutex_unlock(&kthread_update_mutex);
