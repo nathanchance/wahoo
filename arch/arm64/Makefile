@@ -33,12 +33,9 @@ endif
 KBUILD_CFLAGS	+= $(call cc-option,-march=armv8-a+crypto+crc,)
 
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -mno-implicit-float
 KBUILD_CFLAGS	+= -DCONFIG_ARCH_SUPPORTS_INT128
-else
-KBUILD_CFLAGS	+= -mgeneral-regs-only
 endif
-KBUILD_CFLAGS	+= $(lseinstr)
+KBUILD_CFLAGS	+= -mgeneral-regs-only $(lseinstr)
 KBUILD_CFLAGS	+= -fno-pic
 KBUILD_CFLAGS	+= $(call cc-option, -mpc-relative-literal-loads)
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
