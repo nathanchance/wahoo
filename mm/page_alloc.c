@@ -1020,12 +1020,11 @@ static bool free_pages_prepare(struct page *page, unsigned int order)
 {
 	bool compound = PageCompound(page);
 	int i, bad = 0;
-	unsigned long index;
 
 	VM_BUG_ON_PAGE(PageTail(page), page);
 	VM_BUG_ON_PAGE(compound && compound_order(page) != order, page);
 
-	index = 1UL << order;
+	unsigned long index = 1UL << order;
 
 	trace_mm_page_free(page, order);
 	kmemcheck_free_shadow(page, order);
