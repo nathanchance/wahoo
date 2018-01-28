@@ -373,7 +373,7 @@ CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage -fno-tree-loop-im
 CFLAGS_KCOV	= -fsanitize-coverage=trace-pc
 
 # Optimization flags specific to clang
-CLANG_OPT_FLAGS := -O3
+CLANG_OPT_FLAGS := -O3 $(call cc-option,-fsanitize=local-init)
 
 ifeq ($(cc-name),clang)
 ifneq ($(CROSS_COMPILE),)
