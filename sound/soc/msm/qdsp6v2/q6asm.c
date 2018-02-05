@@ -3208,7 +3208,6 @@ int q6asm_set_shared_circ_buff(struct audio_client *ac,
 	if (ac->port[dir].buf) {
 		pr_err("%s: Buffer already allocated\n", __func__);
 		rc = -EINVAL;
-		mutex_unlock(&ac->cmd_lock);
 		goto done;
 	}
 
@@ -3256,8 +3255,8 @@ int q6asm_set_shared_circ_buff(struct audio_client *ac,
 	open->map_region_circ_buf.shm_addr_msw = upper_32_bits(buf_circ->phys);
 	open->map_region_circ_buf.mem_size_bytes = bytes_to_alloc;
 
-	mutex_unlock(&ac->cmd_lock);
 done:
+	mutex_unlock(&ac->cmd_lock);
 	return rc;
 }
 
