@@ -138,7 +138,7 @@ alternative_else_nop_endif
 	ldr	x20, [tsk, #TI_ADDR_LIMIT]
 #endif
 	str	x20, [sp, #S_ORIG_ADDR_LIMIT]
-	mov	x20, #TASK_SIZE_64
+	mov	x20, #USER_DS
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 #else
