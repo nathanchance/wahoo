@@ -77,9 +77,7 @@ struct easelcomm_user_state {
 };
 
 /* max delay in msec waiting for remote to wrap command channel */
-#define CMDCHAN_WRAP_DONE_TIMEOUT_MS 500  /* TODO: set to 2000 (b/65052892) */
-/* additional retry times for asking remote to wrap command channel */
-#define CMDCHAN_SEND_WRAP_RETRY_TIMES 3   /* TODO: remove (b/65052892) */
+#define CMDCHAN_WRAP_DONE_TIMEOUT_MS 1000
 /* max delay in msec waiting for remote to ack link shutdown */
 #define LINK_SHUTDOWN_ACK_TIMEOUT 500
 /* max delay in msec waiting for remote to return flush done */
@@ -584,7 +582,7 @@ static void easelcomm_handle_cmd_ack_shutdown(void)
  */
 static void easelcomm_handle_cmd_send_msg(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_kmsg *cmd_msg;
 	struct easelcomm_kmsg *new_msg;
@@ -683,7 +681,7 @@ static void easelcomm_cmd_channel_remote_set_ready(void)
  * channel.
  */
 static void easelcomm_handle_cmd_link_init(
-	char *command_args, int command_arg_len)
+	char *command_args, size_t command_arg_len)
 {
 	dev_dbg(easelcomm_miscdev.this_device, "recv cmd LINK_INIT\n");
 	easelcomm_cmd_channel_remote_set_ready();
@@ -1119,8 +1117,7 @@ static int easelcomm_cmd_channel_send_wrap(
 	long remaining;
 	uint64_t wrap_marker = CMD_BUFFER_WRAP_MARKER;
 
-	/* TODO: remove retry code once b/65052892 is fixed */
-	do {
+	{
 		if (attempted > 0) {
 			dev_warn(easelcomm_miscdev.this_device,
 				 "%s: retrying after %d attempts",
@@ -1162,7 +1159,10 @@ static int easelcomm_cmd_channel_send_wrap(
 				msecs_to_jiffies(CMDCHAN_WRAP_DONE_TIMEOUT_MS));
 		if (remaining > 0) {
 			ret = 0;
-			break;  /* remote did catch up; no need to retry */
+			dev_dbg(easelcomm_miscdev.this_device,
+				"cmdchan wrap completed, new off=%llx\n",
+				channel->write_offset);
+			goto exit;
 		}
 		if (remaining < 0) {
 			/* waiting was interrupted */
@@ -1177,7 +1177,7 @@ static int easelcomm_cmd_channel_send_wrap(
 			"remote channel did not catch up: reason timeout off=%llx seq=%llu\n",
 			channel->write_offset, channel->write_seqnbr);
 		ret = -ETIMEDOUT;
-	} while (attempted <= CMDCHAN_SEND_WRAP_RETRY_TIMES);
+	}
 
 exit:
 	return ret;
@@ -1192,12 +1192,12 @@ exit:
  */
 int easelcomm_start_cmd(
 	struct easelcomm_service *service, int command_code,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_cmd_channel_remote *channel =
 		&cmd_channel_remote;
 	struct easelcomm_cmd_header cmdhdr;
-	unsigned int cmdbuf_size =
+	size_t cmdbuf_size =
 	    sizeof(struct easelcomm_cmd_header) + command_arg_len;
 	int ret;
 
@@ -1223,13 +1223,14 @@ int easelcomm_start_cmd(
 			goto error;
 	}
 
-	dev_dbg(easelcomm_miscdev.this_device, "cmdchan producer sending cmd seq#%llu svc=%u cmd=%u arglen=%u off=%llx\n",
+	dev_dbg(easelcomm_miscdev.this_device,
+		"cmdchan producer sending cmd seq#%llu svc=%u cmd=%u arglen=%zu off=%llx\n",
 		channel->write_seqnbr, service->service_id, command_code,
 		command_arg_len, channel->write_offset);
 	cmdhdr.service_id = service->service_id;
 	cmdhdr.sequence_nbr = channel->write_seqnbr;
 	cmdhdr.command_code = command_code;
-	cmdhdr.command_arg_len = command_arg_len;
+	cmdhdr.command_arg_len = (uint32_t)command_arg_len;
 
 	/*
 	 * Send the command header. Subsequent calls to
