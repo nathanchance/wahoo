@@ -94,6 +94,10 @@ static void print_error_description(struct kasan_access_info *info)
 	case KASAN_USE_AFTER_SCOPE:
 		bug_type = "use-after-scope";
 		break;
+	case KASAN_ALLOCA_LEFT:
+	case KASAN_ALLOCA_RIGHT:
+		bug_type = "alloca-out-of-bounds";
+		break;
 	}
 
 	pr_err("BUG: KASAN: %s in %pS at addr %p\n",
