@@ -1040,6 +1040,12 @@ prepare0: archprepare FORCE
 # All the preparing..
 prepare: prepare0
 
+# Error out if the user is using GCC
+ifeq ($(cc-name), gcc)
+	@echo This tree is meant to be compiled with Clang >&2
+	@echo GCC does not work >&2 && exit 1
+endif
+
 # Generate some files
 # ---------------------------------------------------------------------------
 
