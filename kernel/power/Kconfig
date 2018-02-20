@@ -330,8 +330,3 @@ config	BOEFFLA_WL_BLOCKER
 	bool "Boeffla generic wakelock blocker driver"
 	depends on PM
 	default y
-
-config QUICK_THAW_FINGERPRINTD
-	bool "Quickly resume fingerprintd"
-	depends on SUSPEND
-	default y
