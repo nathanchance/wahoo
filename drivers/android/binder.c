@@ -3755,8 +3755,10 @@ static unsigned int binder_poll(struct file *filp,
 	bool wait_for_proc_work;
 
 	thread = binder_get_thread(proc);
-	if (!thread)
+	if (!thread) {
+		binder_unlock(__func__);
 		return POLLERR;
+	}
 
 	binder_proc_lock(thread->proc, __LINE__);
 	thread->looper |= BINDER_LOOPER_STATE_POLL;
