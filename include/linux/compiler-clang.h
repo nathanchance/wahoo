@@ -25,3 +25,10 @@
 #ifdef __NO_FORTIFY
 #undef __NO_FORTIFY
 #endif
+
+#ifdef CONFIG_CC_LTO
+#ifdef CONFIG_FTRACE_MCOUNT_RECORD
+#define __norecordmcount \
+	__attribute__((__section__(".text..ftrace")))
+#endif
+#endif

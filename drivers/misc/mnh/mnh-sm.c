@@ -55,6 +55,8 @@
 
 #define MNH_SCU_INf(reg, fld) \
 HW_INf(HWIO_SCU_BASE_ADDR, SCU, reg, fld)
+#define MNH_SCU_INx(reg, inst) \
+HW_INx(HWIO_SCU_BASE_ADDR, SCU, reg, inst)
 #define MNH_SCU_OUTf(reg, fld, val) \
 HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, reg, fld, val)
 #define MNH_SCU_OUT(reg, val) \
@@ -303,6 +305,22 @@ static ssize_t poweron_show(struct device *dev,
 
 static DEVICE_ATTR_RO(poweron);
 
+static ssize_t dump_scu_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
+{
+	int i;
+
+	for (i = 0; i < HWIO_SCU_PIN_CFG_REGNUM; i++) {
+		dev_info(mnh_sm_dev->dev,
+			 "PIN_CFG%d: 0x%08x\n", i,
+			 MNH_SCU_INx(PIN_CFG, i));
+	}
+
+	return 0;
+}
+static DEVICE_ATTR_RO(dump_scu);
+
 static ssize_t poweroff_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
@@ -386,7 +404,18 @@ static int mnh_firmware_waitdownloaded(void)
 	return -EIO;
 }
 
-static size_t mnh_get_firmware_buf(struct device *dev, uint32_t **buf)
+/**
+ * mnh_alloc_firmware_buf - Allocate temporary kernel buffer for mnh firmware
+ *
+ * Attempts allocation of a large, contiguous kernel buffer.  If the initial
+ * attempt weren't successful, try a smaller size until success.
+ *
+ * @dev: Device to allocate memory for.
+ * @buf: Address of pointer to allocated memory.
+ *
+ * Returns size of allocated memory in bytes.
+ */
+static size_t mnh_alloc_firmware_buf(struct device *dev, uint32_t **buf)
 {
 	size_t size = IMG_DOWNLOAD_MAX_SIZE;
 
@@ -399,6 +428,17 @@ static size_t mnh_get_firmware_buf(struct device *dev, uint32_t **buf)
 	}
 
 	return size;
+}
+
+/**
+ * mnh_free_firmware_buf - Free buffer allocated by mnh_alloc_firmware_buf()
+ *
+ * @dev: Device to free memory for.
+ * @buf: Pointer to allocated memory.
+ */
+static inline void mnh_free_firmware_buf(struct device *dev, uint32_t *buf)
+{
+	devm_kfree(dev, buf);
 }
 
 static int mnh_transfer_firmware_contig(size_t fw_size, dma_addr_t src_addr,
@@ -685,14 +725,17 @@ int mnh_download_firmware_legacy(void)
 	/* get double buffers for transferring firmware */
 	for (i = 0; i < 2; i++) {
 		mnh_sm_dev->firmware_buf_size[i] =
-			mnh_get_firmware_buf(mnh_sm_dev->dev,
-					     &mnh_sm_dev->firmware_buf[i]);
+			mnh_alloc_firmware_buf(mnh_sm_dev->dev,
+					       &mnh_sm_dev->firmware_buf[i]);
 		if (!mnh_sm_dev->firmware_buf_size[i]) {
 			dev_err(mnh_sm_dev->dev,
 				"%s: could not allocate a buffer for firmware transfers\n",
 				__func__);
-			return -ENOMEM;
+			goto free_ramdisk;
 		}
+		dev_dbg(mnh_sm_dev->dev,
+			"%s: firmware_buf_size[%d]=%zu",
+			__func__, i, mnh_sm_dev->firmware_buf_size[i]);
 	}
 
 	/* DMA transfer for SBL */
@@ -744,8 +787,12 @@ int mnh_download_firmware_legacy(void)
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
 			 HW_MNH_DT_DOWNLOAD);
 
-	for (i = 0; i < 2; i++)
-		devm_kfree(mnh_sm_dev->dev, mnh_sm_dev->firmware_buf[i]);
+	for (i = 0; i < 2; i++) {
+		mnh_free_firmware_buf(mnh_sm_dev->dev,
+				      mnh_sm_dev->firmware_buf[i]);
+		mnh_sm_dev->firmware_buf_size[i] = 0;
+		mnh_sm_dev->firmware_buf[i] = NULL;
+	}
 
 	release_firmware(fip_img);
 	release_firmware(kernel_img);
@@ -762,6 +809,13 @@ int mnh_download_firmware_legacy(void)
 fail_downloading:
 	dev_err(mnh_sm_dev->dev, "FW downloading fails\n");
 	mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
+free_ramdisk:
+	for (i = 0; i < 2; i++) {
+		mnh_free_firmware_buf(mnh_sm_dev->dev,
+				      mnh_sm_dev->firmware_buf[i]);
+		mnh_sm_dev->firmware_buf_size[i] = 0;
+		mnh_sm_dev->firmware_buf[i] = NULL;
+	}
 	release_firmware(ram_img);
 free_dt:
 	release_firmware(dt_img);
@@ -1330,6 +1384,7 @@ static DEVICE_ATTR_WO(ddr_mbist);
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
+	&dev_attr_dump_scu.attr,
 	&dev_attr_poweroff.attr,
 	&dev_attr_state.attr,
 	&dev_attr_download.attr,
@@ -1482,8 +1537,7 @@ static int mnh_sm_download(void)
 	}
 
 	/* set the boot_args mask */
-	mnh_config_write(HWIO_SCU_GP_ADDR(HWIO_SCU_BASE_ADDR, 2), 4,
-			 mnh_boot_args);
+	MNH_SCU_OUT(GP_BOOT_ARGS, mnh_boot_args);
 
 	/* set the default power mode */
 	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
@@ -1561,6 +1615,12 @@ static int mnh_sm_suspend(void)
  */
 static int mnh_sm_resume(void)
 {
+	/* set the boot_args mask */
+	MNH_SCU_OUT(GP_BOOT_ARGS, mnh_boot_args);
+
+	/* set the default power mode */
+	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
+
 	mnh_resume_firmware();
 	return 0;
 }
@@ -1601,6 +1661,23 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
 	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
 }
 
+static void mnh_sm_enable_ready_irq(bool enable)
+{
+	/* irqs are automatically enabled during request_irq */
+	static bool is_enabled = true;
+
+	if (enable && !is_enabled) {
+		enable_irq(mnh_sm_dev->ready_irq);
+		is_enabled = true;
+	} else if (!enable && is_enabled) {
+		disable_irq(mnh_sm_dev->ready_irq);
+		is_enabled = false;
+	} else {
+		dev_warn(mnh_sm_dev->dev, "%s: ready_irq already %s\n",
+			 __func__, is_enabled ? "enabled" : "disabled");
+	}
+}
+
 /*
  * NOTE (b/64372955): Put Easel into a low-power mode for MIPI bypass. Ideally,
  * this would be done from Easel kernel, but if the Easel kernel fails for some
@@ -1608,11 +1685,88 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
  */
 static void mnh_sm_enter_low_power_mode(void)
 {
+	/* disable clocks for unused system components */
 	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, BTSRAM_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, BTROM_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_REFCLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, IPU_CLKEN, 0);
+
+	/* disable clocks for unused peripherals */
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PVT_CLKEN, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PCIE_REFCLKEN, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C3_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C2_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C1_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C0_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART1_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART0_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIS_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIM_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PERI_DMA_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, TIMER_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, WDT_CLKEN_SW, 0);
+
+	/* reset unused peripherals */
+	MNH_SCU_OUTf(RSTC, I2C3_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C2_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C1_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C0_RST, 1);
+	MNH_SCU_OUTf(RSTC, UART1_RST, 1);
+	MNH_SCU_OUTf(RSTC, UART0_RST, 1);
+	MNH_SCU_OUTf(RSTC, SPIS_RST, 1);
+	MNH_SCU_OUTf(RSTC, SPIM_RST, 1);
+	MNH_SCU_OUTf(RSTC, PERI_DMA_RST, 1);
+	MNH_SCU_OUTf(RSTC, TIMER_RST, 1);
+	MNH_SCU_OUTf(RSTC, WDT_RST, 1);
+	MNH_SCU_OUTf(RSTC, PMON_RST, 1);
+	MNH_SCU_OUTf(RSTC, MIPIRXPHY_RST, 1);
+	MNH_SCU_OUTf(RSTC, MIPITXPHY_RST, 1);
+	MNH_SCU_OUTf(RSTC, LP4PHY_RST, 1);
+	MNH_SCU_OUTf(RSTC, LP4CTL_RST, 1);
+	MNH_SCU_OUTf(RSTC, IPU_RST, 1);
+	MNH_SCU_OUTf(RSTC, CPU_RST, 1);
+
+	/* Shutdown unused memories */
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, BTROM_SLP, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, BTSRAM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, LP4C_MEM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, CPU_L2MEM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, CPU_L1MEM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, IPU_MEM_SD, 1);
+
+	/* switch to SYS200 clock */
+	MNH_SCU_OUTf(CCU_CLK_DIV, LPDDR4_REFCLK_DIV, 0xB);
+	MNH_SCU_OUTf(CCU_CLK_DIV, AXI_FABRIC_CLK_DIV, 1);
+	MNH_SCU_OUTf(CCU_CLK_DIV, PCIE_AXI_CLK_DIV, 3);
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_IPU_SYS200_MODE, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_AXI_SYS200_MODE, 1);
+	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 1);
+
+	/* disable PLLs */
+	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, FRZ_PLL_IN, 1);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, PD, 1);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, FRZ_PLL_IN, 1);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, PD, 1);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 1);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, PD, 1);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
+
+	/* enable pad isolation to the DRAM */
+	gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
+
+	/* disable DRAM power */
+	mnh_pwr_set_state(MNH_PWR_S1);
+
+	mnh_sm_dev->ddr_status = MNH_DDR_OFF;
+	mnh_sm_dev->firmware_downloaded = false;
 }
 
 static int mnh_sm_set_state_locked(int state)
@@ -1642,7 +1796,10 @@ static int mnh_sm_set_state_locked(int state)
 
 		ret = mnh_sm_poweroff();
 
-		disable_irq(mnh_sm_dev->ready_irq);
+		/* enable pad isolation to the DRAM */
+		gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
+
+		mnh_sm_enable_ready_irq(false);
 		break;
 	case MNH_STATE_ACTIVE:
 		/* stage firmware copy to ION if valid update was received */
@@ -1659,7 +1816,7 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_sm_dev->update_status = FW_UPD_NONE;
 		}
 
-		enable_irq(mnh_sm_dev->ready_irq);
+		mnh_sm_enable_ready_irq(true);
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
@@ -1702,6 +1859,8 @@ static int mnh_sm_set_state_locked(int state)
 			reinit_completion(&mnh_sm_dev->powered_complete);
 
 			ret = mnh_sm_suspend();
+
+			mnh_sm_enable_ready_irq(false);
 		}
 		break;
 	default:
@@ -1737,7 +1896,7 @@ static int mnh_sm_set_state_locked(int state)
 				reinit_completion(
 					&mnh_sm_dev->powered_complete);
 				mnh_sm_poweroff();
-				disable_irq(mnh_sm_dev->ready_irq);
+				mnh_sm_enable_ready_irq(false);
 				mnh_sm_dev->state = MNH_STATE_OFF;
 			}
 
@@ -2069,7 +2228,7 @@ static irqreturn_t mnh_sm_ready_irq_handler(int irq, void *cookie)
 			 __func__);
 		reinit_completion(&mnh_sm_dev->suspend_complete);
 	} else {
-		dev_dbg(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
+		dev_info(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
 			__func__);
 		complete(&mnh_sm_dev->suspend_complete);
 	}
@@ -2217,7 +2376,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 			error);
 		goto fail_probe_2;
 	}
-	disable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(false);
 
 	/* request ddr pad isolation pin */
 	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(&pdev->dev,
@@ -2234,9 +2393,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	}
 
 	/* initialize mnh-pwr and get resources there */
-	enable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(true);
 	error = mnh_pwr_init(pdev, dev);
-	disable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(false);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
 		goto fail_probe_2;
