@@ -151,10 +151,11 @@ __setup("androidboot.hardware=", get_model);
 
 static bool is_suspended(void)
 {
-	if (hw_version == WALLEYE)
-		return scr_suspended();
-	else
-		return scr_suspended_taimen();
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
+	return scr_suspended();
+#else
+	return scr_suspended_taimen();
+#endif
 }
 
 /* Wake Gestures */
@@ -727,7 +728,11 @@ static DEVICE_ATTR(vib_strength, (S_IWUSR|S_IRUGO),
  * INIT / EXIT stuff below here
  */
 
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 extern struct kobject *android_touch_kobj;
+#else
+struct kobject *android_touch_kobj;
+#endif
 
 static int __init wake_gestures_init(void)
 {
@@ -788,13 +793,14 @@ static int __init wake_gestures_init(void)
 	}
 #endif
 
-	if (hw_version == TAIMEN) {
-		android_touch_kobj = kobject_create_and_add("android_touch", NULL);
-		if (android_touch_kobj == NULL) {
-			pr_err("%s: subsystem_register failed\n", __func__);
-			goto err_input_dev;
-		}
+
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
+	android_touch_kobj = kobject_create_and_add("android_touch", NULL);
+	if (android_touch_kobj == NULL) {
+		pr_err("%s: subsystem_register failed\n", __func__);
+		goto err_input_dev;
 	}
+#endif
 	rc = sysfs_create_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
 	if (rc) {
 		pr_warn("%s: sysfs_create_file failed for sweep2wake\n", __func__);
