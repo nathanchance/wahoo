@@ -662,6 +662,28 @@ static int bm_init(struct battery_manager *bm)
 		return -EPROBE_DEFER;
 	}
 
+	rc = bm_get_property(bm->bms_psy,
+			     POWER_SUPPLY_PROP_RESISTANCE_ID, &batt_id);
+	if (rc < 0) {
+		bm->batt_id = BM_BATT_TOCAD;
+	} else {
+		if (!batt_id) {
+			pr_bm(ERROR, "Battery id is zero, deferring probe!\n");
+			return -EPROBE_DEFER;
+		}
+
+		for (i = 0; i < BM_BATT_MAX; i++) {
+			if (valid_batt_id[i].min <= batt_id &&
+			    valid_batt_id[i].max >= batt_id)
+				break;
+		}
+		if (i == BM_BATT_MAX) {
+			pr_bm(ERROR, "Couldn't get valid battery id\n");
+			return -EINVAL;
+		}
+		bm->batt_id = i;
+	}
+
 	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_STATUS, &bm->chg_status);
 	if (rc < 0)
@@ -686,28 +708,6 @@ static int bm_init(struct battery_manager *bm)
 			     POWER_SUPPLY_PROP_PRESENT, &bm->chg_present);
 	if (rc < 0)
 		bm->chg_present = 0;
-
-	rc = bm_get_property(bm->bms_psy,
-			     POWER_SUPPLY_PROP_RESISTANCE_ID, &batt_id);
-	if (rc < 0) {
-		bm->batt_id = BM_BATT_TOCAD;
-	} else {
-		if (!batt_id) {
-			pr_bm(ERROR, "Battery id is zero, deferring probe!\n");
-			return -EPROBE_DEFER;
-		}
-
-		for (i = 0; i < BM_BATT_MAX; i++) {
-			if (valid_batt_id[i].min <= batt_id &&
-			    valid_batt_id[i].max >= batt_id)
-				break;
-		}
-		if (i == BM_BATT_MAX) {
-			pr_bm(ERROR, "Couldn't get valid battery id\n");
-			return -EINVAL;
-		}
-		bm->batt_id = i;
-	}
 
 	if (bm->chg_present) {
 		bm->demo_iusb = 1;
