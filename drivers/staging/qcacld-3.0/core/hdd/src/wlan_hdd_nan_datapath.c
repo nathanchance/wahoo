@@ -325,9 +325,10 @@ static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
 		for (i = 0; i < hdd_ctx->num_provisioned_addr; i++) {
 			if ((!qdf_mem_cmp(hdd_ctx->
 					  provisioned_mac_addr[i].bytes,
-			      mac_addr, sizeof(*mac_addr))))
+			      mac_addr, sizeof(*mac_addr)))) {
 				found = true;
 				break;
+			}
 		}
 
 		if (found)
@@ -336,9 +337,10 @@ static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
 		for (i = 0; i < hdd_ctx->num_derived_addr; i++) {
 			if ((!qdf_mem_cmp(hdd_ctx->
 					  derived_mac_addr[i].bytes,
-					  mac_addr, sizeof(*mac_addr))))
+					  mac_addr, sizeof(*mac_addr)))) {
 				found = true;
 				break;
+			}
 		}
 		if (found)
 			continue;

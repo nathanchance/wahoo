@@ -2631,6 +2631,7 @@ int sw49408_check_status(struct device *dev)
 	return ret;
 }
 
+#if 0
 static ssize_t sw49408_get_rn_data(struct device *dev, int16_t *buf, int frame_size)
 {
 	u32 data_offset = 0;
@@ -2646,6 +2647,7 @@ static ssize_t sw49408_get_rn_data(struct device *dev, int16_t *buf, int frame_s
 
 	return 0;
 }
+#endif
 
 int sw49408_irq_abs_data(struct device *dev)
 {
@@ -2787,6 +2789,7 @@ int sw49408_irq_lpwg(struct device *dev)
 	return ret;
 }
 
+#if 0
 void sw49408_irq_runtime_engine_debug(struct device *dev)
 {
 	struct sw49408_data *d = to_sw49408_data(dev);
@@ -2874,6 +2877,7 @@ error:
 	if (rndata != NULL)
 		kfree(rndata);
 }
+#endif
 
 int sw49408_irq_handler(struct device *dev)
 {
@@ -2895,9 +2899,11 @@ int sw49408_irq_handler(struct device *dev)
 		ret = sw49408_irq_lpwg(dev);
 	}
 
+#if 0
 	if (atomic_read(&ts->state.debug_option_mask) & DEBUG_OPTION_2)
 		if (d->info.debug.runtime_dbg_inttype > 0)
 			sw49408_irq_runtime_engine_debug(dev);
+#endif
 
 error:
 	return ret;

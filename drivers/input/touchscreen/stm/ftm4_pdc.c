@@ -467,7 +467,7 @@ static ssize_t store_cmd(struct device *dev, struct device_attribute *devattr,
 	info->cmd_is_running = true;
 	mutex_unlock(&info->cmd_lock);
 	info->cmd_state = 1;
-	memset(info->cmd_param, 0x00, ARRAY_SIZE(info->cmd_param));
+	memset(info->cmd_param, 0x00, sizeof(info->cmd_param));
 
 	len = (int)count;
 	if (*(buf + len - 1) == '\n')
@@ -1956,9 +1956,9 @@ static void run_cx_data_read(void *device_data)
 				Max_cxdiffData_tx = cxdiffData_tx[(j*rx_num)+i];
 			if (cxdiffData_tx[(j*rx_num)+i] < Low_cxdiffData_tx)
 				Low_cxdiffData_tx = cxdiffData_tx[(j*rx_num)+i];
-				snprintf(pTmp, sizeof(pTmp), "%4d",
-						cxdiffData_tx[(j*rx_num)+i]);
-				strcat(pStr, pTmp);
+			snprintf(pTmp, sizeof(pTmp), "%4d",
+					cxdiffData_tx[(j*rx_num)+i]);
+			strcat(pStr, pTmp);
 		}
 		tsp_debug_info(&info->client->dev, "FTS %s\n", pStr);
 	}

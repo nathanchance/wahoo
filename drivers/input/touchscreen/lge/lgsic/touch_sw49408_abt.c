@@ -1076,8 +1076,10 @@ int sw49408_sic_abt_irq_handler(struct device *dev)
 		}
 	}
 
+#if 0
 	if ((abt_conn_tool == NOTHING) && (d->info.debug.runtime_dbg_inttype > 0))
 		sw49408_irq_runtime_engine_debug(dev);
+#endif
 
 error:
 	return ret;

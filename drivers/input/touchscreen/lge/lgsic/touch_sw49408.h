@@ -597,7 +597,9 @@ int sw49408_tc_driving(struct device *dev, int mode);
 int sw49408_irq_abs(struct device *dev);
 int sw49408_irq_abs_data(struct device *dev);
 int sw49408_irq_lpwg(struct device *dev);
+#if 0
 void sw49408_irq_runtime_engine_debug(struct device *dev);
+#endif
 int sw49408_irq_handler(struct device *dev);
 int sw49408_check_status(struct device *dev);
 int sw49408_chip_info_load(struct device* dev);
