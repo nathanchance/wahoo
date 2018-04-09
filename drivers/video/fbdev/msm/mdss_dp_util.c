@@ -295,7 +295,7 @@ static void mdss_dp_calc_tu_parameters(u8 link_rate, u8 ln_cnt,
 				struct dp_vc_tu_mapping_table *tu_table,
 				struct mdss_panel_info *pinfo)
 {
-	u32 const multiplier = 1000000;
+	u32 multiplier = 1000000;
 	u64 pclk, lclk;
 	u8 bpp;
 	int run_idx = 0;

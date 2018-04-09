@@ -168,7 +168,7 @@ static int calc_clk_prepare(struct dsi_phy_t_clk_param *clk_params,
 			    s32 *actual_frac,
 			    s64 *actual_intermediate)
 {
-	u64 const multiplier = BIT(20);
+	u64 multiplier = BIT(20);
 	struct timing_entry *t = &desc->clk_prepare;
 	int rc = 0;
 	u64 dividend, temp, temp_multiple;
@@ -226,7 +226,7 @@ static int calc_clk_zero(struct dsi_phy_t_clk_param *clk_params,
 			 s32 actual_frac,
 			 s64 actual_intermediate)
 {
-	u64 const multiplier = BIT(20);
+	u64 multiplier = BIT(20);
 	int rc = 0;
 	struct timing_entry *t = &desc->clk_zero;
 	s64 mipi_min, rec_temp1, rec_temp2, rec_temp3, rec_min;
@@ -278,7 +278,7 @@ static int calc_clk_trail(struct dsi_phy_t_clk_param *clk_params,
 			  struct dsi_phy_timing *desc,
 			  s64 *teot_clk_lane)
 {
-	u64 const multiplier = BIT(20);
+	u64 multiplier = BIT(20);
 	int rc = 0;
 	struct timing_entry *t = &desc->clk_trail;
 	u64 temp_multiple;
@@ -358,7 +358,7 @@ static int calc_hs_prepare(struct dsi_phy_t_clk_param *clk_params,
 			   struct dsi_phy_timing *desc,
 			   u64 *temp_mul)
 {
-	u64 const multiplier = BIT(20);
+	u64 multiplier = BIT(20);
 	int rc = 0;
 	struct timing_entry *t = &desc->hs_prepare;
 	u64 temp_multiple, dividend, temp;
@@ -433,7 +433,7 @@ static int calc_hs_zero(struct dsi_phy_t_clk_param *clk_params,
 			struct dsi_phy_timing *desc,
 			u64 temp_multiple)
 {
-	u64 const multiplier = BIT(20);
+	u64 multiplier = BIT(20);
 	int rc = 0;
 	struct timing_entry *t = &desc->hs_zero;
 	s64 rec_temp1, rec_temp2, rec_temp3, mipi_min;
