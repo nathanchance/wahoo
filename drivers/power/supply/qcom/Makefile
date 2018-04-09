@@ -8,7 +8,3 @@ obj-$(CONFIG_QPNP_SMB2)		+= battery.o qpnp-smb2.o smb-lib.o pmic-voter.o storm-w
 obj-$(CONFIG_SMB138X_CHARGER)	+= battery.o smb138x-charger.o smb-lib.o pmic-voter.o storm-watch.o
 obj-$(CONFIG_QPNP_QNOVO)	+= battery.o qpnp-qnovo.o
 obj-$(CONFIG_FORCE_FAST_CHARGE) += fastcharge.o
-
-#TODO: remove me b/62058353
-subdir-ccflags-y += \
-	-Wno-duplicate-decl-specifier
