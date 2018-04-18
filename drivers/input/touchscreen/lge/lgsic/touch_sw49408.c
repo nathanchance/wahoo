@@ -2881,7 +2881,9 @@ error:
 
 int sw49408_irq_handler(struct device *dev)
 {
+#if 0
 	struct touch_core_data *ts = to_touch_core(dev);
+#endif
 	struct sw49408_data *d = to_sw49408_data(dev);
 	int ret = 0;
 
