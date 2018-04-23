@@ -292,7 +292,7 @@
  * Show that FORTIFY_SOURCE is not supported by GCC 4.9.4 and earlier
  */
 #if GCC_VERSION <= 40904
-#ifndef _NO_FORTIFY
+#ifndef __NO_FORTIFY
 #define __NO_FORTIFY 1
 #endif
 #endif
