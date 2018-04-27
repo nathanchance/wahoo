@@ -2528,8 +2528,8 @@ static int fts_resume(struct i2c_client *client)
 
 	fts_start_device(info);
 
-exit:
 #ifdef CONFIG_WAKE_GESTURES
+exit:
 	if (wg_changed) {
 		wg_switch = wg_switch_temp;
 		wg_changed = false;
