@@ -288,6 +288,10 @@
  */
 #define uninitialized_var(x) x = x
 
+#if GCC_VERSION >= 50100
+#define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
+#endif
+
 /*
  * Show that FORTIFY_SOURCE is not supported by GCC 4.9.4 and earlier
  */
