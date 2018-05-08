@@ -56,7 +56,11 @@
 #define ADSP_MMAP_HEAP_ADDR 4
 #define ADSP_MMAP_REMOTE_HEAP_ADDR 8
 #define FASTRPC_ENOSUCH 39
+#if CONFIG_SDK_VERSION >= 28
 #define VMID_SSC_Q6     38
+#else
+#define VMID_SSC_Q6     5
+#endif
 #define VMID_ADSP_Q6    6
 #define DEBUGFS_SIZE 1024
 
