@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -153,6 +153,7 @@ void ol_free_remaining_tso_segs(ol_txrx_vdev_handle vdev,
 			}
 
 			next_seg = free_seg->next;
+			free_seg->force_free = 1;
 			ol_tso_free_segment(pdev, free_seg);
 			free_seg = next_seg;
 		}
@@ -163,6 +164,7 @@ void ol_free_remaining_tso_segs(ol_txrx_vdev_handle vdev,
 		 */
 		while (free_seg) {
 			next_seg = free_seg->next;
+			free_seg->force_free = 1;
 			ol_tso_free_segment(pdev, free_seg);
 			free_seg = next_seg;
 		}
@@ -526,6 +528,30 @@ qdf_nbuf_t ol_tx_ll(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 }
 #endif /* TSO */
 
+/**
+ * ol_tx_trace_pkt() - Trace TX packet at OL layer
+ * @skb: skb to be traced
+ * @msdu_id: msdu_id of the packet
+ * @vdev_id: vdev_id of the packet
+ *
+ * Return: None
+ */
+static void ol_tx_trace_pkt(qdf_nbuf_t skb, uint16_t msdu_id,
+			    uint8_t vdev_id)
+{
+	DPTRACE(qdf_dp_trace_ptr(skb,
+				 QDF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD,
+				 qdf_nbuf_data_addr(skb),
+				 sizeof(qdf_nbuf_data(skb)),
+				 msdu_id, vdev_id));
+
+	qdf_dp_trace_log_pkt(vdev_id, skb, QDF_TX);
+
+	qdf_dp_trace_set_track(skb, QDF_TX);
+	DPTRACE(qdf_dp_trace_data_pkt(skb, QDF_DP_TRACE_TX_PACKET_RECORD,
+				      msdu_id, QDF_TX));
+}
+
 #ifdef WLAN_FEATURE_FASTPATH
 /**
  * ol_tx_prepare_ll_fast() Alloc and prepare Tx descriptor
@@ -704,6 +730,7 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 	struct ol_txrx_msdu_info_t msdu_info;
 	uint32_t tso_msdu_stats_idx = 0;
 
+	qdf_mem_zero(&msdu_info, sizeof(msdu_info));
 	msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
 	msdu_info.htt.action.tx_comp_req = 0;
 	/*
@@ -721,7 +748,7 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 		msdu_info.peer = NULL;
 
 		if (qdf_unlikely(ol_tx_prepare_tso(vdev, msdu, &msdu_info))) {
-			ol_txrx_dbg("ol_tx_prepare_tso failed\n");
+			ol_txrx_err("ol_tx_prepare_tso failed\n");
 			TXRX_STATS_MSDU_LIST_INCR(vdev->pdev,
 				 tx.dropped.host_reject, msdu);
 			return msdu;
@@ -780,6 +807,8 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 			TXRX_STATS_MSDU_INCR(pdev, tx.from_stack, msdu);
 
 			if (qdf_likely(tx_desc)) {
+				struct qdf_tso_seg_elem_t *next_seg;
+
 
 				/*
 				 * if this is a jumbo nbuf, then increment the
@@ -791,11 +820,8 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 				if (segments)
 					qdf_nbuf_inc_users(msdu);
 
-				DPTRACE(qdf_dp_trace_ptr(msdu,
-				    QDF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD,
-				    qdf_nbuf_data_addr(msdu),
-				    sizeof(qdf_nbuf_data(msdu)),
-				     tx_desc->id, vdev->vdev_id));
+				ol_tx_trace_pkt(msdu, tx_desc->id,
+						vdev->vdev_id);
 				/*
 				 * If debug display is enabled, show the meta
 				 * data being downloaded to the target via the
@@ -807,6 +833,17 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 					  sizeof(struct htt_tx_msdu_desc_ext_t);
 
 				htt_tx_desc_display(tx_desc->htt_tx_desc);
+
+				/* mark the relevant tso_seg free-able */
+				if (msdu_info.tso_info.curr_seg) {
+					msdu_info.tso_info.curr_seg->
+						sent_to_target = 1;
+					next_seg = msdu_info.tso_info.
+						curr_seg->next;
+				} else {
+					next_seg = NULL;
+				}
+
 				if ((0 == ce_send_fast(pdev->ce_tx_hdl, msdu,
 						ep_id, pkt_download_len))) {
 					struct qdf_tso_info_t *tso_info =
@@ -817,8 +854,7 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 					 */
 					if (tx_desc->pkt_type ==
 							OL_TX_FRM_TSO) {
-						tso_info->curr_seg =
-						tso_info->curr_seg->next;
+						tso_info->curr_seg = next_seg;
 						ol_free_remaining_tso_segs(vdev,
 							&msdu_info, true);
 					}
@@ -833,10 +869,9 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 						htt_tx_status_download_fail);
 					return msdu;
 				}
-				if (msdu_info.tso_info.curr_seg) {
-					msdu_info.tso_info.curr_seg =
-					msdu_info.tso_info.curr_seg->next;
-				}
+				if (msdu_info.tso_info.curr_seg)
+					msdu_info.tso_info.curr_seg = next_seg;
+
 
 				if (msdu_info.tso_info.is_tso) {
 					qdf_nbuf_reset_num_frags(msdu);
@@ -2229,7 +2264,7 @@ void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
 		c_element->cookie = TSO_SEG_MAGIC_COOKIE;
 #ifdef TSOSEG_DEBUG
 		c_element->dbg.txdesc = NULL;
-		c_element->dbg.cur    = -1; /* history empty */
+		qdf_atomic_init(&c_element->dbg.cur); /* history empty */
 		qdf_tso_seg_dbg_record(c_element, TSOSEG_LOC_INIT1);
 #endif /* TSOSEG_DEBUG */
 		c_element->next =
@@ -2253,7 +2288,8 @@ void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
 	c_element->cookie = TSO_SEG_MAGIC_COOKIE;
 #ifdef TSOSEG_DEBUG
 	c_element->dbg.txdesc = NULL;
-	c_element->dbg.cur    = -1; /* history empty */
+	qdf_atomic_init(&c_element->dbg.cur); /* history empty */
+	// c_element->dbg.cur    = -1; /* history empty */
 	qdf_tso_seg_dbg_record(c_element, TSOSEG_LOC_INIT2);
 #endif /* TSOSEG_DEBUG */
 	c_element->next = NULL;
@@ -2293,11 +2329,10 @@ void ol_tso_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
 	while (i-- > 0 && c_element) {
 		temp = c_element->next;
 		if (c_element->on_freelist != 1) {
-			qdf_tso_seg_dbg_bug("this seg already freed (double?)");
+			qdf_tso_seg_dbg_bug("seg already freed (double?)");
 			return;
 		} else if (c_element->cookie != TSO_SEG_MAGIC_COOKIE) {
-			qdf_print("this seg cookie is bad (memory corruption?)");
-			QDF_BUG(0);
+			qdf_tso_seg_dbg_bug("seg cookie is bad (corruption?)");
 			return;
 		}
 		/* free this seg, so reset the cookie value*/

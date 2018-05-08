@@ -1957,6 +1957,21 @@ int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
 	return rc;
 }
 
+#ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+int smblib_get_cycle_count(struct smb_charger *chg,
+			   union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CYCLE_COUNT, val);
+	return rc;
+}
+#endif
+
 /***********************
  * BATTERY PSY SETTERS *
  ***********************/
@@ -2673,14 +2688,23 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 int smblib_set_prop_usb_current_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
-	int rc;
+	int rc = 0;
 	int icl_ua = val->intval;
 
 	if (icl_ua < 0)
 		return -EINVAL;
 
 	/* cancel vote when icl_ua is voted 0 */
-	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, icl_ua != 0, icl_ua);
+	if (val->intval > USBIN_25MA) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+			  true, val->intval);
+	} else if (chg->system_suspend_supported) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+				  false, 0);
+	} else {
+		smblib_dbg(chg, PR_MISC, "suspend not supported\n");
+		return rc;
+	}
 
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote USB ICL %d, rc=%d\n",
@@ -4243,10 +4267,15 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 			rc);
 
 	/* enable DRP */
-	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 TYPEC_POWER_ROLE_CMD_MASK, 0);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
+	if (chg->typec_pr_disabled)
+		smblib_err(chg, "Skip enable DRP due to typec_pr_disabled=true\n");
+	else {
+		rc = smblib_masked_write(chg,
+					 TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+					 TYPEC_POWER_ROLE_CMD_MASK, 0);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
+	}
 
 	/* HW controlled CC_OUT */
 	rc = smblib_masked_write(chg, TAPER_TIMER_SEL_CFG_REG,
