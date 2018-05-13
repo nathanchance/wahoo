@@ -1349,7 +1349,7 @@ static int __init cpufreq_stats_init(void)
 		proc_create_data("concurrent_policy_time", 0444, uid_cpupower,
 			&concurrent_policy_time_fops, NULL);
 
-		uid_cpupower_enable = 0;
+		uid_cpupower_enable = 1;
 	}
 
 	cpufreq_stats_initialized = true;

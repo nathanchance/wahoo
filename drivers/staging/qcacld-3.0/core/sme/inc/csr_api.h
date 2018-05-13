@@ -1007,6 +1007,7 @@ typedef struct tagCsrRoamProfile {
 	uint32_t hlp_ie_len;
 	struct cds_fils_connection_info *fils_con_info;
 #endif
+	bool force_rsne_override;
 } tCsrRoamProfile;
 
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
@@ -1124,6 +1125,32 @@ struct csr_sta_roam_policy_params {
 	enum sta_roam_policy_dfs_mode dfs_mode;
 	bool skip_unsafe_channels;
 	uint8_t sap_operating_band;
+};
+
+/**
+ * struct csr_neighbor_report_offload_params - neighbor report offload params
+ * @params_bitmask: bitmask to specify which of the below are enabled
+ * @time_offset: time offset after 11k offload command to trigger a neighbor
+ *		report request (in seconds)
+ * @low_rssi_offset: Offset from rssi threshold to trigger neighbor
+ *	report request (in dBm)
+ * @bmiss_count_trigger: Number of beacon miss events to trigger neighbor
+ *		report request
+ * @per_threshold_offset: offset from PER threshold to trigger neighbor
+ *		report request (in %)
+ * @neighbor_report_cache_timeout: timeout after which new trigger can enable
+ *		sending of a neighbor report request (in seconds)
+ * @max_neighbor_report_req_cap: max number of neighbor report requests that
+ *		can be sent to the peer in the current session
+ */
+struct csr_neighbor_report_offload_params {
+	uint8_t params_bitmask;
+	uint32_t time_offset;
+	uint32_t low_rssi_offset;
+	uint32_t bmiss_count_trigger;
+	uint32_t per_threshold_offset;
+	uint32_t neighbor_report_cache_timeout;
+	uint32_t max_neighbor_report_req_cap;
 };
 
 typedef struct tagCsrConfigParam {
@@ -1244,6 +1271,7 @@ typedef struct tagCsrConfigParam {
 	bool fScanTwice;
 	uint32_t nVhtChannelWidth;
 	uint8_t enableTxBF;
+	bool enable_subfee_vendor_vhtie;
 	uint8_t enable_txbf_sap_mode;
 	uint8_t enable2x2;
 	bool enableVhtFor24GHz;
@@ -1367,6 +1395,8 @@ typedef struct tagCsrConfigParam {
 	uint32_t wlm_latency_flags[CSR_NUM_WLM_LATENCY_LEVEL];
 	struct sir_score_config bss_score_params;
 	uint8_t oce_feature_bitmap;
+	uint32_t offload_11k_enable_bitmask;
+	struct csr_neighbor_report_offload_params neighbor_report_offload;
 } tCsrConfigParam;
 
 /* Tush */

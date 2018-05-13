@@ -47,6 +47,7 @@
 #include "pld_common.h"
 #include "wlan_hdd_driver_ops.h"
 #include "wlan_hdd_scan.h"
+#include "wlan_hdd_ipa.h"
 
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
@@ -301,24 +302,31 @@ void hdd_hif_close(void *hif_ctx)
  * @bus_type: Underlying bus type
  * @bid: Bus id passed by platform driver
  *
- * Return: void
+ * Return: 0 - success, < 0 - failure
  */
-static void hdd_init_qdf_ctx(struct device *dev, void *bdev,
-			     enum qdf_bus_type bus_type,
-			     const struct hif_bus_id *bid)
+static int hdd_init_qdf_ctx(struct device *dev, void *bdev,
+			    enum qdf_bus_type bus_type,
+			    const struct hif_bus_id *bid)
 {
 	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 
 	if (!qdf_dev) {
 		hdd_err("Invalid QDF device");
-		return;
+		return -EINVAL;
 	}
 
 	qdf_dev->dev = dev;
 	qdf_dev->drv_hdl = bdev;
 	qdf_dev->bus_type = bus_type;
 	qdf_dev->bid = bid;
-	cds_smmu_mem_map_setup(qdf_dev);
+
+	if (cds_smmu_mem_map_setup(qdf_dev, hdd_ipa_is_present()) !=
+		QDF_STATUS_SUCCESS) {
+		hdd_err("cds_smmu_mem_map_setup() failed");
+		return -EFAULT;
+	}
+
+	return 0;
 }
 
 /**
@@ -385,7 +393,10 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	else
 		cds_set_load_in_progress(true);
 
-	hdd_init_qdf_ctx(dev, bdev, bus_type, (const struct hif_bus_id *)bid);
+	ret = hdd_init_qdf_ctx(dev, bdev, bus_type,
+			       (const struct hif_bus_id *)bid);
+	if (ret < 0)
+		goto err_init_qdf_ctx;
 
 	if (reinit) {
 		ret = hdd_wlan_re_init();
@@ -406,6 +417,7 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	} else {
 		cds_set_load_in_progress(false);
 		cds_set_driver_loaded(true);
+		hdd_start_complete(0);
 	}
 
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
@@ -431,6 +443,7 @@ err_hdd_deinit:
 	} else
 		cds_set_load_in_progress(false);
 
+err_init_qdf_ctx:
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 	hdd_remove_pm_qos(dev);
 
@@ -532,12 +545,6 @@ static void wlan_hdd_shutdown(void)
 {
 	void *hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 
-	if (hdd_get_conparam() == QDF_GLOBAL_FTM_MODE) {
-		hdd_err("Crash recovery is not allowed in FTM mode");
-		QDF_BUG(0);
-		return;
-	}
-
 	if (!hif_ctx) {
 		hdd_err("Failed to get HIF context, ignore SSR shutdown");
 		return;
@@ -548,6 +555,18 @@ static void wlan_hdd_shutdown(void)
 		hdd_err("Load/unload in progress, ignore SSR shutdown");
 		return;
 	}
+
+	/*
+	 * Force Complete all the wait events before shutdown.
+	 * This is done at "hdd_cleanup_on_fw_down" api also to clean up the
+	 * wait events of north bound apis.
+	 * In case of SSR there is significant dely between FW down event and
+	 * wlan_hdd_shutdown, there is a possibility of race condition that
+	 * these wait events gets complete at "hdd_cleanup_on_fw_down" and
+	 * some new event is added before shutdown.
+	 */
+	qdf_complete_wait_events();
+
 	/* this is for cases, where shutdown invoked from platform */
 	cds_set_recovery_in_progress(true);
 	hdd_wlan_ssr_shutdown_event();

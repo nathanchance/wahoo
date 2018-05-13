@@ -1903,6 +1903,7 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 		session->maxTxPower = lim_get_max_tx_power(reg_max,
 					local_power_constraint,
 					mac_ctx->roam.configParam.nTxPowerCap);
+		session->def_max_tx_pwr = session->maxTxPower;
 
 		pe_debug("Reg max %d local power con %d max tx pwr %d",
 			reg_max, local_power_constraint, session->maxTxPower);
@@ -5807,18 +5808,8 @@ static void lim_process_update_add_ies(tpAniSirGlobal mac_ctx,
 		if (update_ie->append) {
 			/*
 			 * In case of append, allocate new memory
-			 * with combined length.
-			 * Multiple back to back append commands
-			 * can lead to a huge length.So, check
-			 * for the validity of the length.
+			 * with combined length
 			 */
-			if (addn_ie->probeRespDataLen >
-				(USHRT_MAX - update_ie->ieBufferlength)) {
-				pe_err("IE Length overflow, curr:%d, new:%d",
-					addn_ie->probeRespDataLen,
-					update_ie->ieBufferlength);
-				goto end;
-			}
 			new_length = update_ie->ieBufferlength +
 				addn_ie->probeRespDataLen;
 			new_ptr = qdf_mem_malloc(new_length);
@@ -6073,7 +6064,6 @@ skip_vht:
 	lim_send_chan_switch_action_frame(mac_ctx,
 		session_entry->gLimChannelSwitch.primaryChannel,
 		ch_offset, session_entry);
-	session_entry->gLimChannelSwitch.switchCount--;
 }
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -73,6 +73,7 @@ struct wma_tgt_services {
 	bool get_peer_info_enabled;
 	bool is_fils_roaming_supported;
 	bool is_fw_mawc_capable;
+	bool is_11k_offload_supported;
 };
 
 /**
@@ -177,7 +178,7 @@ struct wma_tgt_cfg {
 	bool egap_support;
 #endif
 	uint32_t fine_time_measurement_cap;
-	bool bpf_enabled;
+	bool apf_enabled;
 #ifdef FEATURE_WLAN_RA_FILTERING
 	bool is_ra_rate_limit_enabled;
 #endif

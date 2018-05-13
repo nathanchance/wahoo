@@ -449,7 +449,7 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_BOOST_CURRENT,
 	POWER_SUPPLY_PROP_PE_START,
 	POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT,
-	POWER_SUPPLY_PROP_PORT_TEMP,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
 	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
 	POWER_SUPPLY_PROP_PR_SWAP,
@@ -544,7 +544,7 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		rc = smblib_get_prop_use_external_vbus_output(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_PORT_TEMP:
+	case POWER_SUPPLY_PROP_TEMP:
 		rc = smblib_get_prop_usb_port_temp(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
@@ -612,7 +612,7 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		rc = smblib_set_prop_use_external_vbus_output(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_PORT_TEMP:
+	case POWER_SUPPLY_PROP_TEMP:
 		rc = smblib_set_prop_usb_port_temp(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
@@ -642,7 +642,7 @@ static int smb2_usb_prop_is_writeable(struct power_supply *psy,
 		return 1;
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		return 1;
-	case POWER_SUPPLY_PROP_PORT_TEMP:
+	case POWER_SUPPLY_PROP_TEMP:
 		return 1;
 	default:
 		break;
@@ -1021,6 +1021,9 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_DP_DM,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+#ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#endif
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -1135,6 +1138,11 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		rc = smblib_get_prop_batt_charge_counter(chg, val);
 		break;
+#ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		rc = smblib_get_cycle_count(chg, val);
+		break;
+#endif
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;

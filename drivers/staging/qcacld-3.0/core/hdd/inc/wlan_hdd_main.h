@@ -163,8 +163,6 @@
 #define WLAN_WAIT_TIME_ANTENNA_MODE_REQ 3000
 #define WLAN_WAIT_TIME_SET_DUAL_MAC_CFG 1500
 
-#define WLAN_WAIT_TIME_BPF     1000
-
 /* rcpi request timeout in milli seconds */
 #define WLAN_WAIT_TIME_RCPI 500
 /* Maximum time(ms) to wait for RSO CMD status event */
@@ -444,7 +442,7 @@ extern struct mutex hdd_init_deinit_lock;
 #define LINK_CONTEXT_MAGIC  0x4C494E4B  /* LINKSPEED */
 #define LINK_STATUS_MAGIC   0x4C4B5354  /* LINKSTATUS(LNST) */
 #define TEMP_CONTEXT_MAGIC  0x74656d70   /* TEMP (temperature) */
-#define BPF_CONTEXT_MAGIC 0x4575354    /* BPF */
+#define APF_CONTEXT_MAGIC 0x4575354    /* APF */
 #define POWER_STATS_MAGIC 0x14111990
 #define RCPI_CONTEXT_MAGIC  0x7778888  /* RCPI */
 #define ACTION_FRAME_RANDOM_CONTEXT_MAGIC 0x87878787
@@ -1246,15 +1244,6 @@ struct hdd_runtime_pm_context {
 	qdf_runtime_lock_t scan;
 	qdf_runtime_lock_t roc;
 	qdf_runtime_lock_t dfs;
-};
-
-/**
- * struct hdd_connect_pm_context - Runtime PM connect context per adapter
- * @connect: Runtime Connect Context
- *
- * Structure to hold runtime pm connect context for each adapter.
- */
-struct hdd_connect_pm_context {
 	qdf_runtime_lock_t connect;
 };
 
@@ -1537,7 +1526,6 @@ struct hdd_adapter_s {
 	 * channel needs to be moved from the existing 2.4GHz channel.
 	 */
 	uint8_t pre_cac_chan;
-	struct hdd_connect_pm_context connect_rpm_ctx;
 	struct power_stats_response *chip_power_stats;
 
 	/* rcpi information */
@@ -1688,18 +1676,6 @@ struct hdd_offloaded_packets_ctx {
 	struct mutex op_lock;
 };
 #endif
-
-/**
- * struct hdd_bpf_context - hdd Context for bpf
- * @magic: magic number
- * @completion: Completion variable for BPF Get Capability
- * @capability_response: capabilities response received from fw
- */
-struct hdd_bpf_context {
-	unsigned int magic;
-	struct completion completion;
-	struct sir_bpf_get_offload capability_response;
-};
 
 /**
  * enum driver_status: Driver Modules status
@@ -2081,7 +2057,7 @@ struct hdd_context_s {
 	struct completion set_antenna_mode_cmpl;
 	/* Current number of TX X RX chains being used */
 	enum antenna_mode current_antenna_mode;
-	bool bpf_enabled;
+	bool apf_enabled;
 
 	/* the radio index assigned by cnss_logger */
 	int radio_index;
@@ -2089,6 +2065,7 @@ struct hdd_context_s {
 	bool hbw_requested;
 	uint32_t last_nil_scan_bug_report_timestamp;
 	uint32_t ol_enable;
+	uint32_t tcp_delack_on;
 #ifdef WLAN_FEATURE_NAN_DATAPATH
 	bool nan_datapath_enabled;
 #endif
@@ -2146,6 +2123,7 @@ struct hdd_context_s {
 	hdd_adapter_t *cap_tsf_context;
 #endif
 	struct sta_ap_intf_check_work_ctx *sta_ap_intf_check_work_info;
+	bool force_rsne_override;
 	qdf_wake_lock_t monitor_mode_wakelock;
 	bool lte_coex_ant_share;
 
@@ -2160,6 +2138,7 @@ struct hdd_context_s {
 	/* mutex lock to block concurrent access */
 	struct mutex power_stats_lock;
 #endif
+	qdf_atomic_t is_acs_allowed;
 };
 
 int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
@@ -2222,6 +2201,7 @@ hdd_adapter_t *hdd_get_adapter_by_rand_macaddr(hdd_context_t *hdd_ctx,
 QDF_STATUS hdd_init_station_mode(hdd_adapter_t *pAdapter);
 hdd_adapter_t *hdd_get_adapter(hdd_context_t *pHddCtx,
 			enum tQDF_ADAPTER_MODE mode);
+bool hdd_is_adapter_valid(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter);
 void hdd_deinit_adapter(hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
 			bool rtnl_held);
 QDF_STATUS hdd_stop_adapter(hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
@@ -2251,10 +2231,23 @@ enum tQDF_GLOBAL_CON_MODE hdd_get_conparam(void);
 void hdd_abort_mac_scan(hdd_context_t *pHddCtx, uint8_t sessionId,
 			uint32_t scan_id, eCsrAbortReason reason);
 void hdd_cleanup_actionframe(hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter);
-
+void hdd_cleanup_actionframe_no_wait(hdd_context_t *pHddCtx,
+		hdd_adapter_t *pAdapter);
 void crda_regulatory_entry_default(uint8_t *countryCode, int domain_id);
 void wlan_hdd_reset_prob_rspies(hdd_adapter_t *pHostapdAdapter);
 void hdd_prevent_suspend(uint32_t reason);
+
+/*
+ * hdd_get_first_valid_adapter() - Get the first valid adapter from adapter list
+ *
+ * This function is used to fetch the first valid adapter from the adapter
+ * list. If there is no valid adapter then it returns NULL
+ *
+ * Return: NULL if no valid adapter found in the adapter list
+ *
+ */
+hdd_adapter_t *hdd_get_first_valid_adapter(void);
+
 void hdd_allow_suspend(uint32_t reason);
 void hdd_prevent_suspend_timeout(uint32_t timeout, uint32_t reason);
 
@@ -3020,5 +3013,14 @@ hdd_station_info_t *hdd_get_stainfo(hdd_station_info_t *aStaInfo,
 
 int hdd_driver_memdump_init(void);
 void hdd_driver_memdump_deinit(void);
+
+/**
+ * hdd_is_cli_iface_up() - check if there is any cli iface up
+ * @hdd_ctx: HDD context
+ *
+ * Return: return true if there is any cli iface(STA/P2P_CLI) is up
+ *         else return false
+ */
+bool hdd_is_cli_iface_up(hdd_context_t *hdd_ctx);
 
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

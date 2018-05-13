@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -808,7 +808,7 @@ static ssize_t mdss_dsi_cmd_state_read(struct file *file, char __user *buf,
 	if (blen < 0)
 		return 0;
 
-	if (copy_to_user(buf, buffer, blen))
+	if (copy_to_user(buf, buffer, min(count, (size_t)blen+1)))
 		return -EFAULT;
 
 	*ppos += blen;
@@ -3541,6 +3541,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 			pr_err("Failed to request disp ERR_DETECT irq : %d\n", rc);
 			goto error_shadow_clk_deinit;
 		}
+		disable_irq(gpio_to_irq(ctrl_pdata->disp_err_detect_gpio));
 		pr_info("request disp ERR_DETECT irq\n");
 	}
 

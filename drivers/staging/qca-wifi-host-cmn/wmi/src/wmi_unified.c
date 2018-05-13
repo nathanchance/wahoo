@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1710,7 +1710,7 @@ end:
 
 }
 
-#define WMI_WQ_WD_TIMEOUT (10 * 1000) /* 10s */
+#define WMI_WQ_WD_TIMEOUT (30 * 1000) /* 30s */
 
 static inline void wmi_workqueue_watchdog_warn(uint32_t msg_type_id)
 {
@@ -2121,6 +2121,22 @@ void wmi_set_tgt_assert(wmi_unified_t wmi_handle, bool val)
 {
 	wmi_handle->tgt_force_assert_enable = val;
 }
+
+/**
+ * wmi_stop() - generic function to block unified WMI command
+ * @wmi_handle: handle to WMI.
+ *
+ * @Return: success always.
+ */
+int
+wmi_stop(wmi_unified_t wmi_handle)
+{
+	QDF_TRACE(QDF_MODULE_ID_WMI, QDF_TRACE_LEVEL_INFO,
+		  "WMI Stop\n");
+	wmi_handle->wmi_stopinprogress = 1;
+	return 0;
+}
+
 #ifdef WMI_NON_TLV_SUPPORT
 /**
  * API to flush all the previous packets  associated with the wmi endpoint
@@ -2134,17 +2150,4 @@ wmi_flush_endpoint(wmi_unified_t wmi_handle)
 		wmi_handle->wmi_endpoint_id, 0);
 }
 
-/**
- * generic function to block unified WMI command
- * @param wmi_handle      : handle to WMI.
- * @return 0  on success and -ve on failure.
- */
-int
-wmi_stop(wmi_unified_t wmi_handle)
-{
-	QDF_TRACE(QDF_MODULE_ID_WMI, QDF_TRACE_LEVEL_INFO,
-			"WMI Stop\n");
-	wmi_handle->wmi_stopinprogress = 1;
-	return 0;
-}
 #endif

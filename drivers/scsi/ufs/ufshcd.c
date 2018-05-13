@@ -53,6 +53,34 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
 
+static void ufshcd_log_slowio(struct ufs_hba *hba,
+		struct ufshcd_lrb *lrbp, s64 iotime_us)
+{
+	sector_t lba = -1;
+	int transfer_len = -1;
+	u8 opcode = 0xff;
+
+	if (likely(iotime_us < hba->slowio_us))
+		return;
+
+	hba->slowio_cnt++;
+
+	if (lrbp->cmd) {
+		opcode = (u8)(*lrbp->cmd->cmnd);
+		if (opcode == READ_10 || opcode == WRITE_10) {
+			if (lrbp->cmd->request && lrbp->cmd->request->bio)
+				lba = lrbp->cmd->request->bio->
+					bi_iter.bi_sector;
+			transfer_len = be32_to_cpu(
+				lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+		}
+	}
+	dev_err_ratelimited(hba->dev,
+		"Slow UFS (%lld): time = %lld us, opcode = %02x, lba = %ld, "
+		"len = %d\n", hba->slowio_cnt, iotime_us, opcode, lba,
+		transfer_len);
+}
+
 #ifdef CONFIG_DEBUG_FS
 
 static int ufshcd_tag_req_type(struct request *rq)
@@ -63,6 +91,8 @@ static int ufshcd_tag_req_type(struct request *rq)
 		rq_type = TS_NOT_SUPPORTED;
 	else if (rq->cmd_flags & REQ_FLUSH)
 		rq_type = TS_FLUSH;
+	else if (rq->cmd_flags & REQ_DISCARD)
+		rq_type = TS_DISCARD;
 	else if (rq_data_dir(rq) == READ)
 		rq_type = (rq->cmd_flags & REQ_URGENT) ?
 			TS_URGENT_READ : TS_READ;
@@ -115,6 +145,9 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
 		lrbp->issue_time_stamp);
 
+	/* Log for slow I/O */
+	ufshcd_log_slowio(hba, lrbp, delta);
+
 	/* update general request statistics */
 	if (hba->ufs_stats.req_stats[TS_TAG].count == 0)
 		hba->ufs_stats.req_stats[TS_TAG].min = delta;
@@ -147,6 +180,56 @@ ufshcd_update_query_stats(struct ufs_hba *hba, enum query_opcode opcode, u8 idn)
 		hba->ufs_stats.query_stats_arr[opcode][idn]++;
 }
 
+static void
+__update_io_stat(struct ufs_hba *hba, struct ufshcd_io_stat *io_stat,
+		int transfer_len, int is_start)
+{
+	if (is_start) {
+		u64 diff;
+		io_stat->req_count_started++;
+		io_stat->total_bytes_started += transfer_len;
+		diff = io_stat->req_count_started -
+			io_stat->req_count_completed;
+		if (diff > io_stat->max_diff_req_count) {
+			io_stat->max_diff_req_count = diff;
+		}
+		diff = io_stat->total_bytes_started -
+			io_stat->total_bytes_completed;
+		if (diff > io_stat->max_diff_total_bytes) {
+			io_stat->max_diff_total_bytes = diff;
+		}
+	} else {
+		io_stat->req_count_completed++;
+		io_stat->total_bytes_completed += transfer_len;
+	}
+}
+
+static void
+update_io_stat(struct ufs_hba *hba, int tag, int is_start)
+{
+	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
+	u8 opcode;
+	int transfer_len;
+
+	if (!lrbp->cmd)
+		return;
+	opcode = (u8)(*lrbp->cmd->cmnd);
+	if (opcode != READ_10 && opcode != WRITE_10)
+		return;
+
+	transfer_len = be32_to_cpu(lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+
+	__update_io_stat(hba, &hba->ufs_stats.io_readwrite, transfer_len,
+			is_start);
+	if (opcode == READ_10) {
+		__update_io_stat(hba, &hba->ufs_stats.io_read, transfer_len,
+				is_start);
+	} else {
+		__update_io_stat(hba, &hba->ufs_stats.io_write, transfer_len,
+				is_start);
+	}
+}
+
 #else
 static inline void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
 {
@@ -164,6 +247,11 @@ static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 static inline
 void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 {
+	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
+		lrbp->issue_time_stamp);
+
+	/* Log for slow I/O */
+	ufshcd_log_slowio(hba, lrbp, delta);
 }
 
 static inline
@@ -171,6 +259,12 @@ void ufshcd_update_query_stats(struct ufs_hba *hba,
 			       enum query_opcode opcode, u8 idn)
 {
 }
+
+static void
+update_io_stat(struct ufs_hba *hba, int tag, int is_start)
+{
+}
+
 #endif
 
 #define UFSHCD_REQ_SENSE_SIZE	18
@@ -2334,6 +2428,7 @@ int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	wmb();
 	ufshcd_cond_add_cmd_trace(hba, task_tag, "send");
 	ufshcd_update_tag_stats(hba, task_tag);
+	update_io_stat(hba, task_tag, 1);
 	return ret;
 }
 
@@ -5537,11 +5632,11 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 			/* Clear pending transfer requests */
 			ufshcd_clear_cmd(hba, index);
 			ufshcd_outstanding_req_clear(hba, index);
-			clear_bit_unlock(index, &hba->lrb_in_use);
 			lrbp->complete_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
+			clear_bit_unlock(index, &hba->lrb_in_use);
 			ufshcd_release_all(hba);
 			if (cmd->request) {
 				/*
@@ -5581,7 +5676,6 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 	struct scsi_cmnd *cmd;
 	int result;
 	int index;
-	struct request *req;
 
 	for_each_set_bit(index, &completed_reqs, hba->nutrs) {
 		lrbp = &hba->lrb[index];
@@ -5589,15 +5683,16 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 		if (cmd) {
 			ufshcd_cond_add_cmd_trace(hba, index, "complete");
 			ufshcd_update_tag_stats_completion(hba, cmd);
+			update_io_stat(hba, index, 0);
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
 			cmd->result = result;
-			clear_bit_unlock(index, &hba->lrb_in_use);
 			lrbp->complete_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
 			hba->ufs_stats.clk_rel.ctx = XFR_REQ_COMPL;
+			clear_bit_unlock(index, &hba->lrb_in_use);
 			__ufshcd_release(hba, false);
 			__ufshcd_hibern8_release(hba, false);
 			if (cmd->request) {
@@ -5610,23 +5705,22 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 					false);
 				ufshcd_vops_crypto_engine_cfg_end(hba,
 					lrbp, cmd->request);
-			}
 
-			clear_bit_unlock(index, &hba->lrb_in_use);
-			req = cmd->request;
-			if (req) {
 				/* Update IO svc time latency histogram */
-				if (req->lat_hist_enabled) {
+				if (cmd->request->lat_hist_enabled) {
 					ktime_t completion;
 					u_int64_t delta_us;
 
 					completion = ktime_get();
 					delta_us = ktime_us_delta(completion,
-						  req->lat_hist_io_start);
+						cmd->request->
+							lat_hist_io_start);
 					/* rq_data_dir() => true if WRITE */
-					blk_update_latency_hist(&hba->io_lat_s,
-						(rq_data_dir(req) == READ),
-						delta_us);
+					blk_update_latency_hist(
+						(rq_data_dir(
+						 cmd->request) == READ) ?
+						&hba->io_lat_read :
+						&hba->io_lat_write, delta_us);
 				}
 			}
 			/* Do not touch lrbp after scsi done */
@@ -9274,9 +9368,10 @@ latency_hist_store(struct device *dev, struct device_attribute *attr,
 
 	if (kstrtol(buf, 0, &value))
 		return -EINVAL;
-	if (value == BLK_IO_LAT_HIST_ZERO)
-		blk_zero_latency_hist(&hba->io_lat_s);
-	else if (value == BLK_IO_LAT_HIST_ENABLE ||
+	if (value == BLK_IO_LAT_HIST_ZERO) {
+		memset(&hba->io_lat_read, 0, sizeof(hba->io_lat_read));
+		memset(&hba->io_lat_write, 0, sizeof(hba->io_lat_write));
+	} else if (value == BLK_IO_LAT_HIST_ENABLE ||
 		 value == BLK_IO_LAT_HIST_DISABLE)
 		hba->latency_hist_enabled = value;
 	return count;
@@ -9287,8 +9382,14 @@ latency_hist_show(struct device *dev, struct device_attribute *attr,
 		  char *buf)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
+	size_t written_bytes;
 
-	return blk_latency_hist_show(&hba->io_lat_s, buf);
+	written_bytes = blk_latency_hist_show("Read", &hba->io_lat_read,
+			buf, PAGE_SIZE);
+	written_bytes += blk_latency_hist_show("Write", &hba->io_lat_write,
+			buf + written_bytes, PAGE_SIZE - written_bytes);
+
+	return written_bytes;
 }
 
 static DEVICE_ATTR(latency_hist, S_IRUGO | S_IWUSR,
@@ -9304,7 +9405,78 @@ ufshcd_init_latency_hist(struct ufs_hba *hba)
 static void
 ufshcd_exit_latency_hist(struct ufs_hba *hba)
 {
-	device_create_file(hba->dev, &dev_attr_latency_hist);
+	device_remove_file(hba->dev, &dev_attr_latency_hist);
+}
+
+/**
+ * Two sysfs entries for slow I/O monitoring:
+ *  - slowio_us:  watermark time in us. Can be updated by writing.
+ *  - slowio_cnt: number of I/O count. Can be reseted by writing any value.
+*/
+static ssize_t
+slowio_us_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags, value;
+
+	if (kstrtol(buf, 0, &value))
+		return -EINVAL;
+
+	if (value < UFSHCD_MIN_SLOWIO_US)
+		return -EINVAL;
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->slowio_us = value;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	return count;
+}
+
+static ssize_t
+slowio_us_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_us);
+}
+
+static ssize_t
+slowio_cnt_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->slowio_cnt = 0;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	return count;
+}
+
+static ssize_t
+slowio_cnt_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_cnt);
+}
+
+static DEVICE_ATTR_RW(slowio_us);
+static DEVICE_ATTR_RW(slowio_cnt);
+
+static void
+ufshcd_init_slowio(struct ufs_hba *hba)
+{
+	if (device_create_file(hba->dev, &dev_attr_slowio_us))
+		dev_err(hba->dev, "Failed to create slowio_us sysfs entry\n");
+	if (device_create_file(hba->dev, &dev_attr_slowio_cnt))
+		dev_err(hba->dev, "Failed to create slowio_cnt sysfs entry\n");
+
+	hba->slowio_us = UFSHCD_DEFAULT_SLOWIO_US;
+}
+
+static void
+ufshcd_exit_slowio(struct ufs_hba *hba)
+{
+	device_remove_file(hba->dev, &dev_attr_slowio_us);
+	device_remove_file(hba->dev, &dev_attr_slowio_cnt);
 }
 
 /**
@@ -9321,6 +9493,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 
 	ufshcd_exit_clk_gating(hba);
 	ufshcd_exit_hibern8_on_idle(hba);
+	ufshcd_exit_slowio(hba);
 	if (ufshcd_is_clkscaling_supported(hba)) {
 		device_remove_file(hba->dev, &hba->clk_scaling.enable_attr);
 		ufshcd_exit_latency_hist(hba);
@@ -10032,6 +10205,8 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 
 	ufshcd_init_latency_hist(hba);
 
+	ufshcd_init_slowio(hba);
+
 	/*
 	 * We are assuming that device wasn't put in sleep/power-down
 	 * state exclusively during the boot stage before kernel.
@@ -10055,6 +10230,7 @@ out_remove_scsi_host:
 exit_gating:
 	ufshcd_exit_clk_gating(hba);
 	ufshcd_exit_latency_hist(hba);
+	ufshcd_exit_slowio(hba);
 out_disable:
 	hba->is_irq_enabled = false;
 	ufshcd_hba_exit(hba);

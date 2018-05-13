@@ -456,9 +456,20 @@ wlansap_roam_process_ch_change_success(tpAniSirGlobal mac_ctx,
 		  FL("sapdfs: changing target channel to [%d]"),
 		  mac_ctx->sap.SapDfsInfo.target_channel);
 	sap_ctx->channel = mac_ctx->sap.SapDfsInfo.target_channel;
-	/* Identify if this is channel change in radar detected state */
-	if (eSAP_DISCONNECTING != sap_ctx->sapsMachine)
+
+	/*
+	 * Identify if this is channel change in radar detected state
+	 * Also if we are waiting for sap to stop, don't proceed further
+	 * to restart SAP again.
+	 */
+	if ((eSAP_DISCONNECTING != sap_ctx->sapsMachine) ||
+	    sap_ctx->stop_bss_in_progress) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+			  FL("sapdfs: state [%d] Stop BSS in progress [%d], not starting SAP after channel change"),
+			  sap_ctx->sapsMachine,
+			  sap_ctx->stop_bss_in_progress);
 		return;
+	}
 
 	if (sap_ctx->ch_params.ch_width == CH_WIDTH_160MHZ) {
 		is_ch_dfs = true;
@@ -897,8 +908,11 @@ wlansap_roam_callback(void *ctx, tCsrRoamInfo *csr_roam_info, uint32_t roamId,
 	}
 
 	mac_ctx = PMAC_STRUCT(hal);
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("Before switch on roam_status = %d"), roam_status);
+	if (eCSR_ROAM_UPDATE_SCAN_RESULT != roam_status) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+			FL("roam_status = %d, roam_result = %d"),
+			roam_status, roam_result);
+	}
 
 	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
 
@@ -1092,9 +1106,6 @@ wlansap_roam_callback(void *ctx, tCsrRoamInfo *csr_roam_info, uint32_t roamId,
 	default:
 		break;
 	}
-
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("Before switch on roam_result = %d"), roam_result);
 
 	switch (roam_result) {
 	case eCSR_ROAM_RESULT_INFRA_ASSOCIATION_IND:

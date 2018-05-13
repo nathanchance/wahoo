@@ -283,6 +283,7 @@ static int snd_usb_create_streams(struct snd_usb_audio *chip, int ctrlif)
 	struct usb_interface_descriptor *altsd;
 	struct usb_interface *usb_iface;
 	int i, protocol;
+	int rest_bytes;
 
 	usb_iface = usb_ifnum_to_if(dev, ctrlif);
 	if (!usb_iface) {
@@ -316,7 +317,6 @@ static int snd_usb_create_streams(struct snd_usb_audio *chip, int ctrlif)
 	case UAC_VERSION_1: {
 		void *control_header;
 		struct uac1_ac_header_descriptor *h1;
-		int rest_bytes;
 
 		control_header = snd_usb_find_csint_desc(host_iface->extra,
 					host_iface->extralen, NULL, UAC_HEADER);
