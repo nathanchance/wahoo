@@ -880,25 +880,31 @@ static int htc_battery_probe_process(void)
 				       POWER_SUPPLY_PROP_BATTERY_TYPE, &ret);
 	if (rc < 0) {
 		BATT_ERR("Unable to read battery-type rc=%d\n", rc);
-		htc_batt_info.rep.batt_id = BATT_ID_UNKNOWN;
+		return -ENODEV;
 	} else {
 		if (!strncmp(ret.strval,
-			     LOADING_BATT_TYPE, sizeof(LOADING_BATT_TYPE)))
+			     LOADING_BATT_TYPE, sizeof(LOADING_BATT_TYPE))) {
+			BATT_LOG("%s: Battery still loading...\n", __func__);
 			return -EPROBE_DEFER;
-		else if ((!strncmp(ret.strval,
-				   WALLEYE_BATT_ID_1,
-				   sizeof(WALLEYE_BATT_ID_1))) ||
-			 (!strncmp(ret.strval,
-				   MUSKIE_BATT_ID_1, sizeof(MUSKIE_BATT_ID_1))))
+		} else if (!strstr(ret.strval, "walleye") ||
+			   !strstr(ret.strval, "muskie")) {
+			BATT_LOG("%s: Battery is not an HTC battery, not registering driver!\n", __func__);
+			return -ENODEV;
+		} else if ((!strncmp(ret.strval,
+				     WALLEYE_BATT_ID_1,
+				     sizeof(WALLEYE_BATT_ID_1))) ||
+			   (!strncmp(ret.strval,
+				     MUSKIE_BATT_ID_1, sizeof(MUSKIE_BATT_ID_1)))) {
 			htc_batt_info.rep.batt_id = BATT_ID_1;
-		else if ((!strncmp(ret.strval,
-				   WALLEYE_BATT_ID_2,
-				   sizeof(WALLEYE_BATT_ID_2))) ||
-			 (!strncmp(ret.strval,
-				   MUSKIE_BATT_ID_2, sizeof(MUSKIE_BATT_ID_2))))
+		} else if ((!strncmp(ret.strval,
+				     WALLEYE_BATT_ID_2,
+				     sizeof(WALLEYE_BATT_ID_2))) ||
+			   (!strncmp(ret.strval,
+				     MUSKIE_BATT_ID_2, sizeof(MUSKIE_BATT_ID_2)))) {
 			htc_batt_info.rep.batt_id = BATT_ID_2;
-		else
+		} else {
 			htc_batt_info.rep.batt_id = BATT_ID_UNKNOWN;
+		}
 	}
 
 	id_kohms = get_property(
@@ -1017,32 +1023,9 @@ static int htc_battery_fb_register(void)
 	return 0;
 }
 
-static bool htc_correct_battery_type(struct power_supply *bms_psy)
-{
-	union power_supply_propval pval;
-	int rc;
-
-	rc = power_supply_get_property(bms_psy,
-		POWER_SUPPLY_PROP_BATTERY_TYPE, &pval);
-	if (rc < 0) {
-		BATT_ERR("Couldn't read battery type, rc=%d\n", rc);
-		return false;
-	}
-
-	return strstr(pval.strval, "walleye");
-}
-
 static int htc_battery_probe(struct platform_device *pdev)
 {
-	struct power_supply *bms_psy;
 	int rc = 0;
-
-	bms_psy = power_supply_get_by_name("bms");
-	if (!bms_psy)
-		return -EPROBE_DEFER;
-
-	if (!htc_correct_battery_type(bms_psy))
-		return -ENODEV;
 
 	mutex_lock(&htc_battery_lock);
 
