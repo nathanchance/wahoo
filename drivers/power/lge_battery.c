@@ -645,6 +645,21 @@ static int bm_fb_register_notifier(struct battery_manager *bm)
 	return rc;
 }
 
+static bool lge_correct_battery_type(struct power_supply *bms_psy)
+{
+	union power_supply_propval pval;
+	int rc;
+
+	rc = power_supply_get_property(bms_psy,
+				       POWER_SUPPLY_PROP_BATTERY_TYPE, &pval);
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't read battery type, rc=%d\n", rc);
+		return false;
+	}
+
+	return strstr(pval.strval, "lge");
+}
+
 static int bm_init(struct battery_manager *bm)
 {
 	int i, rc, batt_temp, batt_volt, batt_id = 0;
@@ -682,11 +697,21 @@ static int bm_init(struct battery_manager *bm)
 	rc = bm_get_property(bm->bms_psy,
 			     POWER_SUPPLY_PROP_RESISTANCE_ID, &batt_id);
 	if (rc < 0) {
+		pr_bm(ERROR, "Unable to read battery-type rc=%d\n", rc);
+		if (!lge_correct_battery_type(bm->bms_psy)) {
+			pr_bm(ERROR, "Battery is not an LGE battery, not registering driver!\n");
+			return -ENODEV;
+		}
 		bm->batt_id = BM_BATT_TOCAD;
 	} else {
 		if (!batt_id) {
 			pr_bm(ERROR, "Battery id is zero, deferring probe!\n");
 			return -EPROBE_DEFER;
+		}
+
+		if (!lge_correct_battery_type(bm->bms_psy)) {
+			pr_bm(ERROR, "Battery is not an LGE battery, not registering driver!\n");
+			return -ENODEV;
 		}
 
 		for (i = 0; i < BM_BATT_MAX; i++) {
@@ -761,33 +786,10 @@ static int bm_init(struct battery_manager *bm)
 	return 0;
 }
 
-static bool lge_correct_battery_type(struct power_supply *bms_psy)
-{
-	union power_supply_propval pval;
-	int rc;
-
-	rc = power_supply_get_property(bms_psy,
-		POWER_SUPPLY_PROP_BATTERY_TYPE, &pval);
-	if (rc < 0) {
-		pr_bm(ERROR, "Couldn't read battery type, rc=%d\n", rc);
-		return false;
-	}
-
-	return strstr(pval.strval, "lge");
-}
-
 static int lge_battery_probe(struct platform_device *pdev)
 {
 	struct battery_manager *bm;
-	struct power_supply *bms_psy;
 	int rc = 0;
-
-	bms_psy = power_supply_get_by_name("bms");
-	if (!bms_psy)
-		return -EPROBE_DEFER;
-
-	if (!lge_correct_battery_type(bms_psy))
-		return -ENODEV;
 
 	bm = devm_kzalloc(&pdev->dev, sizeof(struct battery_manager),
 			  GFP_KERNEL);
