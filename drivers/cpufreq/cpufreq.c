@@ -2193,9 +2193,9 @@ EXPORT_SYMBOL(cpufreq_get_policy);
 
 #ifdef CONFIG_ARCH_MSM8998
 #define UNDERCLK_MAX_PERFCL 1958400
-static bool disable_underclock;
-module_param_named(disable_underclock,
-	disable_underclock, bool, S_IRUGO | S_IWUSR | S_IWGRP);
+static bool enable_underclock;
+module_param_named(enable_underclock,
+	enable_underclock, bool, S_IRUGO | S_IWUSR | S_IWGRP);
 #endif
 
 /*
@@ -2209,7 +2209,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	int ret;
 
 #ifdef CONFIG_ARCH_MSM8998
-	if (!disable_underclock) {
+	if (enable_underclock) {
 		if (new_policy->cpu > 3) {
 			if (new_policy->max > UNDERCLK_MAX_PERFCL)
 				new_policy->max = UNDERCLK_MAX_PERFCL;
