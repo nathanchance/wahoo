@@ -29,11 +29,8 @@ extern bool wg_switch;
 extern bool wg_switch_temp;
 extern bool wg_changed;
 extern int vib_strength;
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 bool scr_suspended(void);
-#else
 bool scr_suspended_taimen(void);
-#endif
 void set_vibrate(int value);
 
 #endif	/* _LINUX_WAKE_GESTURES_H */
