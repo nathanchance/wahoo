@@ -17,6 +17,7 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/wakelock.h>
+#include <linux/wahoo_info.h>
 
 #define BATT_DRV_NAME	"lge_battery"
 
@@ -765,6 +766,13 @@ static int lge_battery_probe(struct platform_device *pdev)
 {
 	struct battery_manager *bm;
 	int rc = 0;
+
+#ifndef MODULE
+	if (is_google_walleye()) {
+		pr_bm(ERROR, "This is not the Pixel 2 XL, bailing out...\n");
+		return -ENODEV;
+	}
+#endif
 
 	bm = devm_kzalloc(&pdev->dev, sizeof(struct battery_manager),
 			  GFP_KERNEL);
