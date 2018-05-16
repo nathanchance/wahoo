@@ -24,6 +24,7 @@
 #include <linux/rtc.h>
 #include <linux/wakelock.h>
 #include <linux/workqueue.h>
+#include <linux/wahoo_info.h>
 
 #define HTC_BATT_NAME "htc_battery"
 
@@ -1020,6 +1021,14 @@ static int htc_battery_fb_register(void)
 static int htc_battery_probe(struct platform_device *pdev)
 {
 	int rc = 0;
+
+#ifndef MODULE
+	if (is_google_taimen()) {
+		BATT_ERR("%s: This is not the Pixel 2, bailing out...\n",
+			  __func__);
+		return -ENODEV;
+	}
+#endif
 
 	mutex_lock(&htc_battery_lock);
 
