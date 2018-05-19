@@ -33,7 +33,6 @@
 #include <linux/quotaops.h>
 #include <linux/buffer_head.h>
 #include <linux/bio.h>
-#include <linux/iversion.h>
 #include "ext4.h"
 #include "ext4_jbd2.h"
 
@@ -1607,21 +1606,15 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 			return ERR_PTR(-EFSCORRUPTED);
 		}
 		if (!IS_ERR(inode) && ext4_encrypted_inode(dir) &&
-		    (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)) &&
+		    (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+		     S_ISLNK(inode->i_mode)) &&
 		    !ext4_is_child_context_consistent_with_parent(dir,
 								  inode)) {
-			int nokey = ext4_encrypted_inode(inode) &&
-				!ext4_encryption_info(inode);
-
-			if (nokey) {
-				iput(inode);
-				return ERR_PTR(-ENOKEY);
-			}
+			iput(inode);
 			ext4_warning(inode->i_sb,
 				     "Inconsistent encryption contexts: %lu/%lu\n",
 				     (unsigned long) dir->i_ino,
 				     (unsigned long) inode->i_ino);
-			iput(inode);
 			return ERR_PTR(-EPERM);
 		}
 	}
@@ -1942,7 +1935,7 @@ static int add_dirent_to_buf(handle_t *handle, struct ext4_filename *fname,
 	 */
 	dir->i_mtime = dir->i_ctime = ext4_current_time(dir);
 	ext4_update_dx_flag(dir);
-	inode_inc_iversion(dir);
+	dir->i_version++;
 	ext4_mark_inode_dirty(handle, dir);
 	BUFFER_TRACE(bh, "call ext4_handle_dirty_metadata");
 	err = ext4_handle_dirty_dirent_node(handle, dir, bh);
@@ -2349,7 +2342,7 @@ int ext4_generic_delete_entry(handle_t *handle,
 					blocksize);
 			else
 				de->inode = 0;
-			inode_inc_iversion(dir);
+			dir->i_version++;
 			return 0;
 		}
 		i += ext4_rec_len_from_disk(de->rec_len, blocksize);
@@ -2980,7 +2973,7 @@ static int ext4_rmdir(struct inode *dir, struct dentry *dentry)
 			     "empty directory '%.*s' has too many links (%u)",
 			     dentry->d_name.len, dentry->d_name.name,
 			     inode->i_nlink);
-	inode_inc_iversion(inode);
+	inode->i_version++;
 	clear_nlink(inode);
 	/* There's no need to set i_disksize: the fact that i_nlink is
 	 * zero will ensure that the right thing happens during any
@@ -3374,7 +3367,7 @@ static int ext4_setent(handle_t *handle, struct ext4_renament *ent,
 	ent->de->inode = cpu_to_le32(ino);
 	if (ext4_has_feature_filetype(ent->dir->i_sb))
 		ent->de->file_type = file_type;
-	inode_inc_iversion(ent->dir);
+	ent->dir->i_version++;
 	ent->dir->i_ctime = ent->dir->i_mtime =
 		ext4_current_time(ent->dir);
 	ext4_mark_inode_dirty(handle, ent->dir);

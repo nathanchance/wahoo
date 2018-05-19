@@ -662,7 +662,7 @@ struct inode {
 		struct hlist_head	i_dentry;
 		struct rcu_head		i_rcu;
 	};
-	atomic64_t		i_version;
+	u64			i_version;
 	atomic_t		i_count;
 	atomic_t		i_dio_count;
 	atomic_t		i_writecount;
@@ -1819,8 +1819,7 @@ struct super_operations {
  */
 #define __IS_FLG(inode, flg)	((inode)->i_sb->s_flags & (flg))
 
-static inline bool sb_rdonly(const struct super_block *sb) { return sb->s_flags & MS_RDONLY; }
-#define IS_RDONLY(inode)	sb_rdonly((inode)->i_sb)
+#define IS_RDONLY(inode)	((inode)->i_sb->s_flags & MS_RDONLY)
 #define IS_SYNC(inode)		(__IS_FLG(inode, MS_SYNCHRONOUS) || \
 					((inode)->i_flags & S_SYNC))
 #define IS_DIRSYNC(inode)	(__IS_FLG(inode, MS_SYNCHRONOUS|MS_DIRSYNC) || \
@@ -1952,6 +1951,21 @@ static inline void inode_dec_link_count(struct inode *inode)
 {
 	drop_nlink(inode);
 	mark_inode_dirty(inode);
+}
+
+/**
+ * inode_inc_iversion - increments i_version
+ * @inode: inode that need to be updated
+ *
+ * Every time the inode is modified, the i_version field will be incremented.
+ * The filesystem has to be mounted with i_version flag
+ */
+
+static inline void inode_inc_iversion(struct inode *inode)
+{
+       spin_lock(&inode->i_lock);
+       inode->i_version++;
+       spin_unlock(&inode->i_lock);
 }
 
 enum file_time_flags {
