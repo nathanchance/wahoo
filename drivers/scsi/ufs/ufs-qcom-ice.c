@@ -404,7 +404,6 @@ int ufs_qcom_ice_cfg_start(struct ufs_qcom_host *qcom_host,
 
 	memset(&ice_set, 0, sizeof(ice_set));
 
-	memset(&ice_set, 0, sizeof(ice_set));
 	if (qcom_host->ice.vops->config_start) {
 
 		spin_lock_irqsave(
