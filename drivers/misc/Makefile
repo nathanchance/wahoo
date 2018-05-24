@@ -71,7 +71,3 @@ google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o g
 obj-$(CONFIG_FPR_FPC)  += fpr_FingerprintCard/
 obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
 obj-$(CONFIG_ACCESS_RAMOOPS)	+= access_ramoops.o
-
-# TODO: remove me b/62058353
-subdir-ccflags-y += \
-	-Wno-ignored-attributes

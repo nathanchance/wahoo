@@ -108,5 +108,4 @@ obj-$(CONFIG_QCOM_CX_IPEAK) += cx_ipeak.o
 
 # TODO: remove me b/62058353
 subdir-ccflags-y += \
-	-Wno-ignored-attributes \
 	-Wno-gcc-compat
