@@ -311,7 +311,7 @@ static inline unsigned long *get_canary(struct kmem_cache *s, void *object)
 
 static inline unsigned long get_canary_value(const void *canary, unsigned long value)
 {
-	return (value ^ (unsigned long)canary) & CANARY_MASK;
+	return (value ^ (unsigned long)canary) & RANDOM_CANARY_MASK;
 }
 
 static inline void set_canary(struct kmem_cache *s, void *object, unsigned long value)
