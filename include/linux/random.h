@@ -43,19 +43,19 @@ unsigned long randomize_range(unsigned long start, unsigned long end, unsigned l
  */
 #ifdef CONFIG_64BIT
 # ifdef __LITTLE_ENDIAN
-#  define CANARY_MASK 0xffffffffffffff00UL
+#  define RANDOM_CANARY_MASK 0xffffffffffffff00UL
 # else /* big endian, 64 bits: */
-#  define CANARY_MASK 0x00ffffffffffffffUL
+#  define RANDOM_CANARY_MASK 0x00ffffffffffffffUL
 # endif
 #else /* 32 bits: */
-# define CANARY_MASK 0xffffffffUL
+# define RANDOM_CANARY_MASK 0xffffffffUL
 #endif
 
 static inline unsigned long get_random_canary(void)
 {
 	unsigned long val = get_random_long();
 
-	return val & CANARY_MASK;
+	return val & RANDOM_CANARY_MASK;
 }
 
 unsigned long randomize_page(unsigned long start, unsigned long range);
