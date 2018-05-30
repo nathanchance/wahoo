@@ -13,6 +13,6 @@ fi
 
 rm -rf net/wireguard
 mkdir -p net/wireguard
-curl -A "$USER_AGENT" -LsS "https://git.zx2c4.com/WireGuard/snapshot/WireGuard-master.tar.xz" | tar -C "net/wireguard" -xJf - --strip-components=2 "WireGuard-master/src"
+curl -A "$USER_AGENT" -LsS "https://git.zx2c4.com/WireGuard/snapshot/WireGuard-${BASH_REMATCH[1]}.tar.xz" | tar -C "net/wireguard" -xJf - --strip-components=2 "WireGuard-${BASH_REMATCH[1]}/src"
 sed -i 's/tristate/bool/;s/default m/default y/;' net/wireguard/Kconfig
 touch net/wireguard/.check
