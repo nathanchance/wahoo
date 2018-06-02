@@ -255,12 +255,14 @@ again:
 	 *
 	 * Use this result only if there is no timer to wake us up sooner.
 	 */
-	stddev = int_sqrt(stddev);
-	if (((avg > stddev * 6) && (divisor * 4 >= INTERVALS * 3))
-						|| stddev <= 20) {
-		if (data->next_timer_us > avg)
-			data->predicted_us = avg;
-		return;
+	if (likely(stddev <= ULONG_MAX)) {
+		stddev = int_sqrt(stddev);
+		if (((avg > stddev * 6) && (divisor * 4 >= INTERVALS * 3))
+							|| stddev <= 20) {
+			if (data->next_timer_us > avg)
+				data->predicted_us = avg;
+			return;
+		}
 	}
 
 	/*

@@ -457,7 +457,7 @@ static int msm_ipc_router_ioctl(struct socket *sock,
 			break;
 		}
 		if (server_arg.num_entries_in_array) {
-			if (((server_arg.num_entries_in_array)) >
+			if (server_arg.num_entries_in_array >
 				(SIZE_MAX / sizeof(*srv_info))) {
 				IPC_RTR_ERR("%s: Integer Overflow %zu * %d\n",
 					__func__, sizeof(*srv_info),

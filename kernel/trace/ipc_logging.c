@@ -357,6 +357,7 @@ void msg_encode_end(struct encode_context *ectxt)
 
 	/* finalize data size */
 	ectxt->hdr.size = ectxt->offset - sizeof(ectxt->hdr);
+	BUG_ON(ectxt->hdr.size > MAX_MSG_SIZE);
 	memcpy(ectxt->buff, &ectxt->hdr, sizeof(ectxt->hdr));
 }
 EXPORT_SYMBOL(msg_encode_end);

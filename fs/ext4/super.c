@@ -2453,6 +2453,9 @@ static loff_t ext4_max_bitmap_size(int bits, int has_huge_files)
 	if (res > upper_limit)
 		res = upper_limit;
 
+	if (res > MAX_LFS_FILESIZE)
+		res = MAX_LFS_FILESIZE;
+
 	return res;
 }
 

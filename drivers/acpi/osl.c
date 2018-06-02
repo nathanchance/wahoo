@@ -372,6 +372,11 @@ acpi_os_map_iomem(acpi_physical_address phys, acpi_size size)
 	acpi_physical_address pg_off;
 	acpi_size pg_sz;
 
+	if (phys > ULONG_MAX) {
+		printk(KERN_ERR PREFIX "Cannot map memory that high\n");
+		return NULL;
+	}
+
 	if (!acpi_gbl_permanent_mmap)
 		return __acpi_map_table((unsigned long)phys, size);
 

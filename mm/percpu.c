@@ -2288,6 +2288,8 @@ void __init percpu_init_late(void)
 		int *map;
 		const size_t size = PERCPU_DYNAMIC_EARLY_SLOTS * sizeof(map[0]);
 
+		BUILD_BUG_ON(size > PAGE_SIZE);
+
 		map = pcpu_mem_zalloc(size);
 		BUG_ON(!map);
 
