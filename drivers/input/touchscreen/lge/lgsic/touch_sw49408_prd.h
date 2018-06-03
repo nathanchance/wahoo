@@ -81,7 +81,7 @@ struct sw49408_test_off_info {
 #define COL_SIZE		18
 #define M1_COL_SIZE		2
 #define LOG_BUF_SIZE		256
-#define OCD_SIZE		104
+#define OCD_SIZE		(sizeof(struct sw49408_touch_debug))
 #define DBG_BUF2_OFFSET		1280
 #define BUF_SIZE 		(PAGE_SIZE * 2)
 #define MAX_LOG_FILE_SIZE	(10 * 1024 * 1024) /* 10 M byte */
