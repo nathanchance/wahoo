@@ -700,6 +700,9 @@ static ssize_t show_scaling_cur_freq(struct cpufreq_policy *policy, char *buf)
 static int cpufreq_set_policy(struct cpufreq_policy *policy,
 				struct cpufreq_policy *new_policy);
 
+static bool disable_boost_on_big;
+module_param_named(disable_boost_on_big, disable_boost_on_big, bool, 0644);
+
 /**
  * cpufreq_per_cpu_attr_write() / store_##file_name() - sysfs write access
  */
@@ -709,6 +712,11 @@ static ssize_t store_##file_name					\
 {									\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
+									\
+	if (disable_boost_on_big &&					\
+	    &policy->object == &policy->min &&				\
+	    policy->cpu > 3)						\
+		return count;						\
 									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
 									\
@@ -2191,6 +2199,13 @@ int cpufreq_get_policy(struct cpufreq_policy *policy, unsigned int cpu)
 }
 EXPORT_SYMBOL(cpufreq_get_policy);
 
+#ifdef CONFIG_ARCH_MSM8998
+#define UNDERCLK_MAX_PERFCL 1958400
+static bool enable_underclock;
+module_param_named(enable_underclock,
+	enable_underclock, bool, S_IRUGO | S_IWUSR | S_IWGRP);
+#endif
+
 /*
  * policy : current policy.
  * new_policy: policy to be set.
@@ -2200,6 +2215,12 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 {
 	struct cpufreq_governor *old_gov;
 	int ret;
+
+#ifdef CONFIG_ARCH_MSM8998
+	if (enable_underclock && new_policy->cpu > 3 &&
+	    new_policy->max > UNDERCLK_MAX_PERFCL)
+		new_policy->max = UNDERCLK_MAX_PERFCL;
+#endif
 
 	pr_debug("setting new policy for CPU %u: %u - %u kHz\n",
 		 new_policy->cpu, new_policy->min, new_policy->max);
