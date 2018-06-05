@@ -700,9 +700,6 @@ static ssize_t show_scaling_cur_freq(struct cpufreq_policy *policy, char *buf)
 static int cpufreq_set_policy(struct cpufreq_policy *policy,
 				struct cpufreq_policy *new_policy);
 
-static bool disable_boost_on_big;
-module_param_named(disable_boost_on_big, disable_boost_on_big, bool, 0644);
-
 /**
  * cpufreq_per_cpu_attr_write() / store_##file_name() - sysfs write access
  */
@@ -713,10 +710,10 @@ static ssize_t store_##file_name					\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
 									\
-	if (disable_boost_on_big &&					\
-	    &policy->object == &policy->min &&				\
-	    policy->cpu > 3)						\
-		return count;						\
+	if (&policy->object == &policy->min) {				\
+		if (policy->cpu > 3)					\
+			return count;					\
+	}								\
 									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
 									\
