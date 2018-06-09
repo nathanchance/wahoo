@@ -58,7 +58,6 @@
 		qcom,mdss-mdp-transfer-time-us = <15000>;
 		qcom,ulps-enabled;
 		qcom,panel-allow-phy-poweroff;
-		qcom,err-detect-enabled = <1>;
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 03 B0
