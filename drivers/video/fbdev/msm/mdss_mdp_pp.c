@@ -6768,8 +6768,8 @@ int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets)
 	u32 i;
 	int rc = 0;
 
-	mdata->ad_off = devm_kzalloc(&mdata->pdev->dev,
-				sizeof(struct mdss_mdp_ad) * mdata->nad_cfgs,
+	mdata->ad_off = devm_kcalloc(&mdata->pdev->dev,
+				mdata->nad_cfgs, sizeof(struct mdss_mdp_ad),
 				GFP_KERNEL);
 
 	if (!mdata->ad_off) {
@@ -6777,8 +6777,8 @@ int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets)
 		return -ENOMEM;
 	}
 
-	mdata->ad_cfgs = devm_kzalloc(&mdata->pdev->dev,
-			sizeof(struct mdss_ad_info) * mdata->nad_cfgs,
+	mdata->ad_cfgs = devm_kcalloc(&mdata->pdev->dev,
+			mdata->nad_cfgs, sizeof(struct mdss_ad_info),
 			GFP_KERNEL);
 
 	if (!mdata->ad_cfgs) {
