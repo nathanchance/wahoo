@@ -4158,7 +4158,7 @@ trace_insert_enum_map_file(struct module *mod, struct trace_enum_map **start,
 	 * where the head holds the module and length of array, and the
 	 * tail holds a pointer to the next list.
 	 */
-	map_array = kmalloc(sizeof(*map_array) * (len + 2), GFP_KERNEL);
+	map_array = kmalloc_array(len + 2, sizeof(*map_array), GFP_KERNEL);
 	if (!map_array) {
 		pr_warning("Unable to allocate trace enum mapping\n");
 		return;
