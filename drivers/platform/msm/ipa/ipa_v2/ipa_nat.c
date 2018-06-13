@@ -325,7 +325,6 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	int result;
 	u32 offset = 0;
 	size_t tmp;
-	gfp_t flag = GFP_KERNEL | (ipa_ctx->use_dma_zone ? GFP_DMA : 0);
 
 	IPADBG("\n");
 	if (init->table_entries == 0) {
@@ -407,7 +406,7 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 
 	memset(&desc, 0, sizeof(desc));
 	/* NO-OP IC for ensuring that IPA pipeline is empty */
-	reg_write_nop = kzalloc(sizeof(*reg_write_nop), flag);
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
 	if (!reg_write_nop) {
 		IPAERR("no mem\n");
 		result = -ENOMEM;
@@ -425,7 +424,7 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	desc[0].pyld = (void *)reg_write_nop;
 	desc[0].len = sizeof(*reg_write_nop);
 
-	cmd = kmalloc(size, flag);
+	cmd = kmalloc(size, GFP_KERNEL);
 	if (!cmd) {
 		IPAERR("Failed to alloc immediate command object\n");
 		result = -ENOMEM;
@@ -570,7 +569,6 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	struct ipa_desc *desc = NULL;
 	u16 size = 0, cnt = 0;
 	int ret = 0;
-	gfp_t flag = GFP_KERNEL | (ipa_ctx->use_dma_zone ? GFP_DMA : 0);
 
 	IPADBG("\n");
 	if (dma->entries <= 0) {
@@ -654,7 +652,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	}
 
 	size = sizeof(struct ipa_nat_dma);
-	cmd = kzalloc(size, flag);
+	cmd = kzalloc(size, GFP_KERNEL);
 	if (cmd == NULL) {
 		IPAERR("Failed to alloc memory\n");
 		ret = -ENOMEM;
@@ -662,7 +660,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	}
 
 	/* NO-OP IC for ensuring that IPA pipeline is empty */
-	reg_write_nop = kzalloc(sizeof(*reg_write_nop), flag);
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
 	if (!reg_write_nop) {
 		IPAERR("Failed to alloc memory\n");
 		ret = -ENOMEM;
@@ -725,13 +723,11 @@ void ipa_nat_free_mem_and_device(struct ipa_nat_mem *nat_ctx)
 
 	if (nat_ctx->is_sys_mem) {
 		IPADBG("freeing the dma memory\n");
-		if (nat_ctx->vaddr) {
-			dma_free_coherent(
-				ipa_ctx->pdev, nat_ctx->size,
-				nat_ctx->vaddr, nat_ctx->dma_handle);
-			nat_ctx->size = 0;
-			nat_ctx->vaddr = NULL;
-		}
+		dma_free_coherent(
+			 ipa_ctx->pdev, nat_ctx->size,
+			 nat_ctx->vaddr, nat_ctx->dma_handle);
+		nat_ctx->size = 0;
+		nat_ctx->vaddr = NULL;
 	}
 	nat_ctx->is_mapped = false;
 	nat_ctx->is_sys_mem = false;
@@ -758,7 +754,6 @@ int ipa2_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	u8 mem_type = IPA_NAT_SHARED_MEMORY;
 	u32 base_addr = IPA_NAT_PHYS_MEM_OFFSET;
 	int result;
-	gfp_t flag = GFP_KERNEL | (ipa_ctx->use_dma_zone ? GFP_DMA : 0);
 
 	IPADBG("\n");
 	if (ipa_ctx->nat_mem.is_tmp_mem) {
@@ -775,7 +770,7 @@ int ipa2_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 
 	memset(&desc, 0, sizeof(desc));
 	/* NO-OP IC for ensuring that IPA pipeline is empty */
-	reg_write_nop = kzalloc(sizeof(*reg_write_nop), flag);
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
 	if (!reg_write_nop) {
 		IPAERR("no mem\n");
 		result = -ENOMEM;
@@ -793,7 +788,7 @@ int ipa2_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	desc[0].pyld = (void *)reg_write_nop;
 	desc[0].len = sizeof(*reg_write_nop);
 
-	cmd = kmalloc(size, flag);
+	cmd = kmalloc(size, GFP_KERNEL);
 	if (cmd == NULL) {
 		IPAERR("Failed to alloc immediate command object\n");
 		result = -ENOMEM;

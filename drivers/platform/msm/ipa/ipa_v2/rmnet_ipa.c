@@ -1543,6 +1543,7 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			}
 			extend_ioctl_data.u.rmnet_mux_val.vchannel_name
 				[IFNAMSIZ-1] = '\0';
+
 			IPAWANDBG("ADD_MUX_CHANNEL(%d, name: %s)\n",
 			extend_ioctl_data.u.rmnet_mux_val.mux_id,
 			extend_ioctl_data.u.rmnet_mux_val.vchannel_name);
@@ -2693,9 +2694,6 @@ int rmnet_ipa_set_data_quota(struct wan_ioctl_set_data_quota *data)
 	enum ipa_upstream_type upstream_type;
 	int rc = 0;
 
-	/* prevent string buffer overflows */
-	data->interface_name[IFNAMSIZ-1] = '\0';
-
 	/* get IPA backhaul type */
 	upstream_type = find_upstream_type(data->interface_name);
 
@@ -2989,10 +2987,6 @@ int rmnet_ipa_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 	enum ipa_upstream_type upstream_type;
 	int rc = 0;
 
-	/* prevent string buffer overflows */
-	data->upstreamIface[IFNAMSIZ-1] = '\0';
-	data->tetherIface[IFNAMSIZ-1] = '\0';
-
 	/* get IPA backhaul type */
 	upstream_type = find_upstream_type(data->upstreamIface);
 
@@ -3027,10 +3021,6 @@ int rmnet_ipa_query_tethering_stats_all(
 	int rc = 0;
 
 	memset(&tether_stats, 0, sizeof(struct wan_ioctl_query_tether_stats));
-
-	/* prevent string buffer overflows */
-	data->upstreamIface[IFNAMSIZ-1] = '\0';
-
 	/* get IPA backhaul type */
 	upstream_type = find_upstream_type(data->upstreamIface);
 

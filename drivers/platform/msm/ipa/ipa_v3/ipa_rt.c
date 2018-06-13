@@ -71,7 +71,6 @@ static int ipa_generate_rt_hw_rule(enum ipa_ip_type ip,
 		return -EPERM;
 	}
 
-
 	/* Adding check to confirm still
 	 * header entry present in header table or not
 	 */
@@ -1251,6 +1250,15 @@ int __ipa3_del_rt_rule(u32 rule_hdl)
 		return -EINVAL;
 	}
 
+	if (!strcmp(entry->tbl->name, IPA_DFLT_RT_TBL_NAME)) {
+		IPADBG("Deleting rule from default rt table idx=%u\n",
+			entry->tbl->idx);
+		if (entry->tbl->rule_cnt == 1) {
+			IPAERR_RL("Default tbl last rule cannot be deleted\n");
+			return -EINVAL;
+		}
+	}
+
 	/* Adding check to confirm still
 	 * header entry present in header table or not
 	 */
@@ -1266,15 +1274,6 @@ int __ipa3_del_rt_rule(u32 rule_hdl)
 		if (!hdr_proc_entry ||
 			hdr_proc_entry->cookie != IPA_PROC_HDR_COOKIE) {
 			IPAERR_RL("Proc header entry already deleted\n");
-			return -EINVAL;
-		}
-	}
-
-	if (!strcmp(entry->tbl->name, IPA_DFLT_RT_TBL_NAME)) {
-		IPADBG("Deleting rule from default rt table idx=%u\n",
-			entry->tbl->idx);
-		if (entry->tbl->rule_cnt == 1) {
-			IPAERR_RL("Default tbl last rule cannot be deleted\n");
 			return -EINVAL;
 		}
 	}

@@ -359,7 +359,7 @@ static int __ipa_add_hdr_proc_ctx(struct ipa_hdr_proc_ctx_add *proc_ctx,
 	entry->hdr = hdr_entry;
 	if (add_ref_hdr)
 		hdr_entry->ref_cnt++;
-	entry->cookie = IPA_HDR_COOKIE;
+	entry->cookie = IPA_PROC_HDR_COOKIE;
 
 	needed_len = ipahal_get_proc_ctx_needed_len(proc_ctx->type);
 
@@ -377,12 +377,12 @@ static int __ipa_add_hdr_proc_ctx(struct ipa_hdr_proc_ctx_add *proc_ctx,
 	mem_size = (ipa3_ctx->hdr_proc_ctx_tbl_lcl) ?
 		IPA_MEM_PART(apps_hdr_proc_ctx_size) :
 		IPA_MEM_PART(apps_hdr_proc_ctx_size_ddr);
-	if (list_empty(&htbl->head_free_offset_list[bin])) {
-		if (htbl->end + ipa_hdr_proc_ctx_bin_sz[bin] > mem_size) {
-			IPAERR_RL("hdr proc ctx table overflow\n");
-			goto bad_len;
-		}
+	if (htbl->end + ipa_hdr_proc_ctx_bin_sz[bin] > mem_size) {
+		IPAERR_RL("hdr proc ctx table overflow\n");
+		goto bad_len;
+	}
 
+	if (list_empty(&htbl->head_free_offset_list[bin])) {
 		offset = kmem_cache_zalloc(ipa3_ctx->hdr_proc_ctx_offset_cache,
 					   GFP_KERNEL);
 		if (!offset) {
@@ -496,21 +496,16 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 	mem_size = (ipa3_ctx->hdr_tbl_lcl) ? IPA_MEM_PART(apps_hdr_size) :
 		IPA_MEM_PART(apps_hdr_size_ddr);
 
-	if (list_empty(&htbl->head_free_offset_list[bin])) {
-		/* if header does not fit to table, place it in DDR */
-		if (htbl->end + ipa_hdr_bin_sz[bin] > mem_size) {
-			entry->is_hdr_proc_ctx = true;
-			entry->phys_base = dma_map_single(ipa3_ctx->pdev,
-				entry->hdr,
-				entry->hdr_len,
-				DMA_TO_DEVICE);
-			if (dma_mapping_error(ipa3_ctx->pdev,
-				entry->phys_base)) {
-				IPAERR("dma_map_single failure for entry\n");
-				goto fail_dma_mapping;
-			}
-		} else {
-			entry->is_hdr_proc_ctx = false;
+	/* if header does not fit to table, place it in DDR */
+	if (htbl->end + ipa_hdr_bin_sz[bin] > mem_size) {
+		entry->is_hdr_proc_ctx = true;
+		entry->phys_base = dma_map_single(ipa3_ctx->pdev,
+			entry->hdr,
+			entry->hdr_len,
+			DMA_TO_DEVICE);
+	} else {
+		entry->is_hdr_proc_ctx = false;
+		if (list_empty(&htbl->head_free_offset_list[bin])) {
 			offset = kmem_cache_zalloc(ipa3_ctx->hdr_offset_cache,
 						   GFP_KERNEL);
 			if (!offset) {
@@ -527,14 +522,14 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 			htbl->end += ipa_hdr_bin_sz[bin];
 			list_add(&offset->link,
 					&htbl->head_offset_list[bin]);
-			entry->offset_entry = offset;
+		} else {
+			/* get the first free slot */
+			offset =
+			list_first_entry(&htbl->head_free_offset_list[bin],
+					struct ipa_hdr_offset_entry, link);
+			list_move(&offset->link, &htbl->head_offset_list[bin]);
 		}
-	} else {
-		entry->is_hdr_proc_ctx = false;
-		/* get the first free slot */
-		offset = list_first_entry(&htbl->head_free_offset_list[bin],
-			struct ipa_hdr_offset_entry, link);
-		list_move(&offset->link, &htbl->head_offset_list[bin]);
+
 		entry->offset_entry = offset;
 	}
 
@@ -592,10 +587,6 @@ ipa_insert_failed:
 	}
 	htbl->hdr_cnt--;
 	list_del(&entry->link);
-
-fail_dma_mapping:
-	entry->is_hdr_proc_ctx = false;
-
 bad_hdr_len:
 	entry->cookie = 0;
 	kmem_cache_free(ipa3_ctx->hdr_cache, entry);
@@ -610,7 +601,7 @@ static int __ipa3_del_hdr_proc_ctx(u32 proc_ctx_hdl,
 	struct ipa3_hdr_proc_ctx_tbl *htbl = &ipa3_ctx->hdr_proc_ctx_tbl;
 
 	entry = ipa3_id_find(proc_ctx_hdl);
-	if (!entry || (entry->cookie != IPA_HDR_COOKIE)) {
+	if (!entry || (entry->cookie != IPA_PROC_HDR_COOKIE)) {
 		IPAERR_RL("bad parm\n");
 		return -EINVAL;
 	}
