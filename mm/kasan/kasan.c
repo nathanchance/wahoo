@@ -34,9 +34,20 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/vmalloc.h>
+#include <linux/bug.h>
 
 #include "kasan.h"
 #include "../slab.h"
+
+void kasan_enable_current(void)
+{
+	current->kasan_depth++;
+}
+
+void kasan_disable_current(void)
+{
+	current->kasan_depth--;
+}
 
 /*
  * Poisons the shadow memory for 'size' bytes starting from 'addr'.
@@ -62,7 +73,7 @@ void kasan_unpoison_shadow(const void *address, size_t size)
 	}
 }
 
-static void __kasan_unpoison_stack(struct task_struct *task, void *sp)
+static void __kasan_unpoison_stack(struct task_struct *task, const void *sp)
 {
 	void *base = task_stack_page(task);
 	size_t size = sp - base;
@@ -77,9 +88,31 @@ void kasan_unpoison_task_stack(struct task_struct *task)
 }
 
 /* Unpoison the stack for the current task beyond a watermark sp value. */
-asmlinkage void kasan_unpoison_remaining_stack(void *sp)
+asmlinkage void kasan_unpoison_task_stack_below(const void *watermark)
 {
-	__kasan_unpoison_stack(current, sp);
+	/*
+	 * Calculate the task stack base address.  Avoid using 'current'
+	 * because this function is called by early resume code which hasn't
+	 * yet set up the percpu register (%gs).
+	 */
+	void *base = (void *)((unsigned long)watermark & ~(THREAD_SIZE - 1));
+
+	kasan_unpoison_shadow(base, watermark - base);
+}
+
+/*
+ * Clear all poison for the region between the current SP and a provided
+ * watermark value, as is sometimes required prior to hand-crafted asm function
+ * returns in the middle of functions.
+ */
+void kasan_unpoison_stack_above_sp_to(const void *watermark)
+{
+	const void *sp = __builtin_frame_address(0);
+	size_t size = watermark - sp;
+
+	if (WARN_ON(sp > watermark))
+		return;
+	kasan_unpoison_shadow(sp, size);
 }
 
 /*
@@ -412,7 +445,7 @@ void kasan_cache_shrink(struct kmem_cache *cache)
 	quarantine_remove_cache(cache);
 }
 
-void kasan_cache_destroy(struct kmem_cache *cache)
+void kasan_cache_shutdown(struct kmem_cache *cache)
 {
 	quarantine_remove_cache(cache);
 }
@@ -543,7 +576,8 @@ bool kasan_slab_free(struct kmem_cache *cache, void *object)
 
 	shadow_byte = READ_ONCE(*(s8 *)kasan_mem_to_shadow(object));
 	if (shadow_byte < 0 || shadow_byte >= KASAN_SHADOW_SCALE_SIZE) {
-		kasan_report_double_free(cache, object, shadow_byte);
+		kasan_report_double_free(cache, object,
+				__builtin_return_address(1));
 		return true;
 	}
 
@@ -767,55 +801,6 @@ void __asan_unpoison_stack_memory(const void *addr, size_t size)
 }
 EXPORT_SYMBOL(__asan_unpoison_stack_memory);
 
-/* Emitted by compiler to poison alloca()ed objects. */
-void __asan_alloca_poison(unsigned long addr, size_t size)
-{
-	size_t rounded_up_size = round_up(size, KASAN_SHADOW_SCALE_SIZE);
-	size_t padding_size = round_up(size, KASAN_ALLOCA_REDZONE_SIZE) -
-			rounded_up_size;
-	size_t rounded_down_size = round_down(size, KASAN_SHADOW_SCALE_SIZE);
-
-	const void *left_redzone = (const void *)(addr -
-			KASAN_ALLOCA_REDZONE_SIZE);
-	const void *right_redzone = (const void *)(addr + rounded_up_size);
-
-	WARN_ON(!IS_ALIGNED(addr, KASAN_ALLOCA_REDZONE_SIZE));
-
-	kasan_unpoison_shadow((const void *)(addr + rounded_down_size),
-			      size - rounded_down_size);
-	kasan_poison_shadow(left_redzone, KASAN_ALLOCA_REDZONE_SIZE,
-			KASAN_ALLOCA_LEFT);
-	kasan_poison_shadow(right_redzone,
-			padding_size + KASAN_ALLOCA_REDZONE_SIZE,
-			KASAN_ALLOCA_RIGHT);
-}
-EXPORT_SYMBOL(__asan_alloca_poison);
-
-/* Emitted by compiler to unpoison alloca()ed areas when the stack unwinds. */
-void __asan_allocas_unpoison(const void *stack_top, const void *stack_bottom)
-{
-	if (unlikely(!stack_top || stack_top > stack_bottom))
-		return;
-
-	kasan_unpoison_shadow(stack_top, stack_bottom - stack_top);
-}
-EXPORT_SYMBOL(__asan_allocas_unpoison);
-
-/* Emitted by the compiler to [un]poison local variables. */
-#define DEFINE_ASAN_SET_SHADOW(byte) \
-	void __asan_set_shadow_##byte(const void *addr, size_t size)	\
-	{								\
-		__memset((void *)addr, 0x##byte, size);			\
-	}								\
-	EXPORT_SYMBOL(__asan_set_shadow_##byte)
-
-DEFINE_ASAN_SET_SHADOW(00);
-DEFINE_ASAN_SET_SHADOW(f1);
-DEFINE_ASAN_SET_SHADOW(f2);
-DEFINE_ASAN_SET_SHADOW(f3);
-DEFINE_ASAN_SET_SHADOW(f5);
-DEFINE_ASAN_SET_SHADOW(f8);
-
 #ifdef CONFIG_MEMORY_HOTPLUG
 static int kasan_mem_notifier(struct notifier_block *nb,
 			unsigned long action, void *data)
@@ -833,5 +818,5 @@ static int __init kasan_memhotplug_init(void)
 	return 0;
 }
 
-core_initcall(kasan_memhotplug_init);
+module_init(kasan_memhotplug_init);
 #endif
