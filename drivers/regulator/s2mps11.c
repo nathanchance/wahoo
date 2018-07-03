@@ -1001,8 +1001,8 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	s2mps11->ext_control_gpio = devm_kmalloc(&pdev->dev,
-			sizeof(*s2mps11->ext_control_gpio) * s2mps11->rdev_num,
+	s2mps11->ext_control_gpio = devm_kmalloc_array(&pdev->dev,
+			s2mps11->rdev_num, sizeof(*s2mps11->ext_control_gpio),
 			GFP_KERNEL);
 	if (!s2mps11->ext_control_gpio)
 		return -ENOMEM;
@@ -1024,7 +1024,7 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 		}
 	}
 
-	rdata = kzalloc(sizeof(*rdata) * s2mps11->rdev_num, GFP_KERNEL);
+	rdata = kcalloc(s2mps11->rdev_num, sizeof(*rdata), GFP_KERNEL);
 	if (!rdata)
 		return -ENOMEM;
 

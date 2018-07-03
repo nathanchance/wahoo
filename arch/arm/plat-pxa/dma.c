@@ -237,8 +237,8 @@ static void pxa_dma_init_debugfs(void)
 	if (!dbgfs_state)
 		goto err_state;
 
-	dbgfs_chan = kmalloc(sizeof(*dbgfs_state) * num_dma_channels,
-			     GFP_KERNEL);
+	dbgfs_chan = kmalloc_array(num_dma_channels, sizeof(*dbgfs_state),
+				   GFP_KERNEL);
 	if (!dbgfs_chan)
 		goto err_alloc;
 
@@ -356,7 +356,8 @@ int __init pxa_init_dma(int irq, int num_ch)
 {
 	int i, ret;
 
-	dma_channels = kzalloc(sizeof(struct dma_channel) * num_ch, GFP_KERNEL);
+	dma_channels = kcalloc(num_ch, sizeof(struct dma_channel),
+			       GFP_KERNEL);
 	if (dma_channels == NULL)
 		return -ENOMEM;
 

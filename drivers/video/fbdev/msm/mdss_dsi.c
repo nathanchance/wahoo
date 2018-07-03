@@ -611,8 +611,9 @@ static int mdss_dsi_get_dt_vreg_data(struct device *dev,
 		pr_debug("%s: vreg found. count=%d\n", __func__, mp->num_vreg);
 	}
 
-	mp->vreg_config = devm_kzalloc(dev, sizeof(struct dss_vreg) *
-		mp->num_vreg, GFP_KERNEL);
+	mp->vreg_config = devm_kcalloc(dev,
+				       mp->num_vreg, sizeof(struct dss_vreg),
+				       GFP_KERNEL);
 	if (!mp->vreg_config) {
 		pr_err("%s: can't alloc vreg mem\n", __func__);
 		rc = -ENOMEM;
@@ -1239,7 +1240,7 @@ static int _mdss_dsi_refresh_cmd(struct buf_data *new_cmds,
 	}
 
 	/* Reallocate space for dcs commands */
-	cmds = kzalloc(cnt * sizeof(struct dsi_cmd_desc), GFP_KERNEL);
+	cmds = kcalloc(cnt, sizeof(struct dsi_cmd_desc), GFP_KERNEL);
 	if (!cmds) {
 		pr_err("%s: Failed to allocate memory\n", __func__);
 		return -ENOMEM;

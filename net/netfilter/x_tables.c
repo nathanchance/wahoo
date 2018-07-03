@@ -500,7 +500,7 @@ int xt_compat_add_offset(u_int8_t af, unsigned int offset, int delta)
 	if (!xp->compat_tab) {
 		if (!xp->number)
 			return -EINVAL;
-		xp->compat_tab = vmalloc(sizeof(struct compat_delta) * xp->number);
+		xp->compat_tab = vmalloc(array_size(sizeof(struct compat_delta), xp->number));
 		if (!xp->compat_tab)
 			return -ENOMEM;
 		xp->cur = 0;
@@ -754,7 +754,7 @@ unsigned int *xt_alloc_entry_offsets(unsigned int size)
 		return off;
 
 	if (size < (SIZE_MAX / sizeof(unsigned int)))
-		off = vmalloc(size * sizeof(unsigned int));
+		off = vmalloc(array_size(size, sizeof(unsigned int)));
 
 	return off;
 }
@@ -1515,7 +1515,7 @@ struct nf_hook_ops *xt_hook_link(const struct xt_table *table, nf_hookfn *fn)
 	struct nf_hook_ops *ops;
 	int ret;
 
-	ops = kmalloc(sizeof(*ops) * num_hooks, GFP_KERNEL);
+	ops = kmalloc_array(num_hooks, sizeof(*ops), GFP_KERNEL);
 	if (ops == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -1699,7 +1699,7 @@ static int __init xt_init(void)
 		seqcount_init(&per_cpu(xt_recseq, i));
 	}
 
-	xt = kmalloc(sizeof(struct xt_af) * NFPROTO_NUMPROTO, GFP_KERNEL);
+	xt = kmalloc_array(NFPROTO_NUMPROTO, sizeof(struct xt_af), GFP_KERNEL);
 	if (!xt)
 		return -ENOMEM;
 

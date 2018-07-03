@@ -1993,8 +1993,9 @@ static int cpsw_probe_dt(struct cpsw_priv *priv,
 	}
 	data->cpts_clock_shift = prop;
 
-	data->slave_data = devm_kzalloc(&pdev->dev, data->slaves
-					* sizeof(struct cpsw_slave_data),
+	data->slave_data = devm_kcalloc(&pdev->dev,
+					data->slaves,
+					sizeof(struct cpsw_slave_data),
 					GFP_KERNEL);
 	if (!data->slave_data)
 		return -ENOMEM;
@@ -2308,8 +2309,8 @@ static int cpsw_probe(struct platform_device *pdev)
 
 	memcpy(ndev->dev_addr, priv->mac_addr, ETH_ALEN);
 
-	priv->slaves = devm_kzalloc(&pdev->dev,
-				    sizeof(struct cpsw_slave) * data->slaves,
+	priv->slaves = devm_kcalloc(&pdev->dev,
+				    data->slaves, sizeof(struct cpsw_slave),
 				    GFP_KERNEL);
 	if (!priv->slaves) {
 		ret = -ENOMEM;

@@ -1849,7 +1849,8 @@ static int bcm_enet_probe(struct platform_device *pdev)
 		 * if a slave is not present on hw */
 		bus->phy_mask = ~(1 << priv->phy_id);
 
-		bus->irq = devm_kzalloc(&pdev->dev, sizeof(int) * PHY_MAX_ADDR,
+		bus->irq = devm_kcalloc(&pdev->dev,
+					PHY_MAX_ADDR, sizeof(int),
 					GFP_KERNEL);
 		if (!bus->irq) {
 			ret = -ENOMEM;
@@ -2193,7 +2194,7 @@ static int bcm_enetsw_open(struct net_device *dev)
 	priv->tx_desc_alloc_size = size;
 	priv->tx_desc_cpu = p;
 
-	priv->tx_skb = kzalloc(sizeof(struct sk_buff *) * priv->tx_ring_size,
+	priv->tx_skb = kcalloc(priv->tx_ring_size, sizeof(struct sk_buff *),
 			       GFP_KERNEL);
 	if (!priv->tx_skb) {
 		dev_err(kdev, "cannot allocate rx skb queue\n");
@@ -2207,7 +2208,7 @@ static int bcm_enetsw_open(struct net_device *dev)
 	spin_lock_init(&priv->tx_lock);
 
 	/* init & fill rx ring with skbs */
-	priv->rx_skb = kzalloc(sizeof(struct sk_buff *) * priv->rx_ring_size,
+	priv->rx_skb = kcalloc(priv->rx_ring_size, sizeof(struct sk_buff *),
 			       GFP_KERNEL);
 	if (!priv->rx_skb) {
 		dev_err(kdev, "cannot allocate rx skb queue\n");

@@ -688,7 +688,7 @@ int diag_dci_query_log_mask(struct diag_dci_client_tbl *entry,
 	byte_mask = 0x01 << (item_num % 8);
 	offset = equip_id * 514;
 
-	if (offset + byte_index > DCI_LOG_MASK_SIZE) {
+	if (offset + byte_index >= DCI_LOG_MASK_SIZE) {
 		pr_err("diag: In %s, invalid offset: %d, log_code: %d, byte_index: %d\n",
 				__func__, offset, log_code, byte_index);
 		return 0;
@@ -715,7 +715,7 @@ int diag_dci_query_event_mask(struct diag_dci_client_tbl *entry,
 	bit_index = event_id % 8;
 	byte_mask = 0x1 << bit_index;
 
-	if (byte_index > DCI_EVENT_MASK_SIZE) {
+	if (byte_index >= DCI_EVENT_MASK_SIZE) {
 		pr_err("diag: In %s, invalid, event_id: %d, byte_index: %d\n",
 				__func__, event_id, byte_index);
 		return 0;
@@ -2960,7 +2960,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 	}
 	create_dci_event_mask_tbl(new_entry->dci_event_mask);
 
-	new_entry->buffers = kzalloc(new_entry->num_buffers *
+	new_entry->buffers = kcalloc(new_entry->num_buffers,
 				     sizeof(struct diag_dci_buf_peripheral_t),
 				     GFP_KERNEL);
 	if (!new_entry->buffers) {
