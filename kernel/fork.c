@@ -78,6 +78,7 @@
 #include <linux/compiler.h>
 #include <linux/sysctl.h>
 #include <linux/kcov.h>
+#include <linux/cpufreq.h>
 #include <linux/cpu_input_boost.h>
 
 #include <asm/pgtable.h>
@@ -228,6 +229,9 @@ static void account_kernel_stack(unsigned long *stack, int account)
 
 void free_task(struct task_struct *tsk)
 {
+#ifdef CONFIG_CPU_FREQ_STAT
+	cpufreq_task_stats_free(tsk);
+#endif
 	account_kernel_stack(tsk->stack, -1);
 	arch_release_thread_stack(tsk->stack);
 	free_thread_stack(tsk->stack);
