@@ -849,7 +849,7 @@ static void wma_data_tx_ack_work_handler(void *ack_work)
 	wma_handle->umac_data_ota_ack_cb = NULL;
 	wma_handle->last_umac_data_nbuf = NULL;
 	qdf_mem_free(work);
-	wma_handle->ack_work_ctx = NULL;
+	wma_handle->data_ack_work_ctx = NULL;
 }
 
 /**
@@ -900,7 +900,7 @@ wma_data_tx_ack_comp_hdlr(void *wma_context, qdf_nbuf_t netbuf, int32_t status)
 		struct wma_tx_ack_work_ctx *ack_work;
 
 		ack_work = qdf_mem_malloc(sizeof(struct wma_tx_ack_work_ctx));
-		wma_handle->ack_work_ctx = ack_work;
+		wma_handle->data_ack_work_ctx = ack_work;
 		if (ack_work) {
 			ack_work->wma_handle = wma_handle;
 			ack_work->sub_type = 0;
@@ -920,27 +920,21 @@ free_nbuf:
 }
 
 /**
- * wma_update_txrx_chainmask() - update txrx chainmask
- * @num_rf_chains: number rf chains
+ * wma_check_txrx_chainmask() - check txrx chainmask
+ * @num_rf_chains: number of rf chains
  * @cmd_value: command value
  *
- * Return: none
+ * Return: QDF_STATUS_SUCCESS for success or error code
  */
-void wma_update_txrx_chainmask(int num_rf_chains, int *cmd_value)
+QDF_STATUS wma_check_txrx_chainmask(int num_rf_chains, int cmd_value)
 {
-	if (*cmd_value > WMA_MAX_RF_CHAINS(num_rf_chains)) {
-		WMA_LOGE("%s: Chainmask value exceeds the maximum supported range setting it to maximum value.",
-			__func__);
-		WMA_LOGE("%s: Requested value %d Updated value %d",
-			__func__, *cmd_value, WMA_MAX_RF_CHAINS(num_rf_chains));
-		*cmd_value = WMA_MAX_RF_CHAINS(num_rf_chains);
-	} else if (*cmd_value < WMA_MIN_RF_CHAINS) {
-		WMA_LOGE("%s: Chainmask value is less than the minimum supported range setting it to minimum value.",
-			__func__);
-		WMA_LOGE("%s: Requested value %d Updated value %d",
-			__func__, *cmd_value, WMA_MIN_RF_CHAINS);
-		*cmd_value = WMA_MIN_RF_CHAINS;
+	if ((cmd_value > WMA_MAX_RF_CHAINS(num_rf_chains)) ||
+	    (cmd_value < WMA_MIN_RF_CHAINS)) {
+		WMA_LOGE("%s: Requested value %d over the range",
+			__func__, cmd_value);
+		return QDF_STATUS_E_INVAL;
 	}
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -1234,9 +1228,15 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 			WMA_LOGP(FL("Failed to fill vdev request for vdev_id %d"),
 				 vdev_id);
 			params->status = false;
-			status = QDF_STATUS_E_NOMEM;
+			goto out;
 		}
-		if (wma_send_vdev_stop_to_fw(wma, vdev_id)) {
+
+		status = wma_send_vdev_stop_to_fw(wma, vdev_id);
+		wma_cli_set_command(vdev_id,
+			(int)WMI_VDEV_PARAM_ABG_MODE_TX_CHAIN_NUM, 0, VDEV_CMD);
+		WMA_LOGD("vdev: %d WMI_VDEV_PARAM_ABG_MODE_TX_CHAIN_NUM 0",
+			 vdev_id);
+		if (QDF_IS_STATUS_ERROR(status)) {
 			WMA_LOGP("%s: %d Failed to send vdev stop vdev %d",
 				 __func__, __LINE__, vdev_id);
 			wma_remove_vdev_req(wma, vdev_id,
@@ -1407,7 +1407,7 @@ static void wma_mgmt_tx_ack_work_handler(void *ack_work)
 	       work->status ? 0 : 1);
 
 	qdf_mem_free(work);
-	wma_handle->ack_work_ctx = NULL;
+	wma_handle->mgmt_ack_work_ctx = NULL;
 }
 
 /**
@@ -1465,6 +1465,7 @@ wma_mgmt_tx_ack_comp_hdlr(void *wma_context, qdf_nbuf_t netbuf, int32_t status)
 
 			ack_work = qdf_mem_malloc(sizeof(
 						struct wma_tx_ack_work_ctx));
+			wma_handle->mgmt_ack_work_ctx = ack_work;
 
 			if (ack_work) {
 				ack_work->wma_handle = wma_handle;
@@ -2183,8 +2184,9 @@ int wma_ibss_peer_info_event_handler(void *handle, uint8_t *data,
 	}
 
 	/*sanity check */
-	if ((num_peers > 32) || (NULL == peer_info)) {
-		WMA_LOGE("%s: Invalid event data from target num_peers %d peer_info %p",
+	if ((num_peers > 32) || (num_peers > param_tlvs->num_peer_info) ||
+	    (!peer_info)) {
+		WMA_LOGE("%s: Invalid event data from target num_peers %d peer_info %pK",
 			__func__, num_peers, peer_info);
 		status = 1;
 		goto send_response;
@@ -2270,7 +2272,7 @@ int wma_fast_tx_fail_event_handler(void *handle, uint8_t *data,
 	if (wma->hddTxFailCb != NULL)
 		wma->hddTxFailCb(peer_mac, tx_fail_cnt);
 	else
-		WMA_LOGE("%s: HDD callback is %p", __func__, wma->hddTxFailCb);
+		WMA_LOGE("%s: HDD callback is %pK", __func__, wma->hddTxFailCb);
 
 	return 0;
 }
@@ -2431,14 +2433,23 @@ void wmi_desc_pool_deinit(tp_wma_handle wma_handle)
 {
 	struct wmi_desc_t *wmi_desc;
 	uint8_t i;
+	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 
+	if (NULL == qdf_dev) {
+		WMA_LOGE("%s: Failed to get qdf_dev_ctx", __func__);
+		return;
+	}
 	qdf_spin_lock_bh(&wma_handle->wmi_desc_pool.wmi_desc_pool_lock);
 	if (wma_handle->wmi_desc_pool.array) {
 		for (i = 0; i < wma_handle->wmi_desc_pool.pool_size; i++) {
 			wmi_desc = (struct wmi_desc_t *)
 				    (&wma_handle->wmi_desc_pool.array[i]);
-			if (wmi_desc && wmi_desc->nbuf)
+			if (wmi_desc && wmi_desc->nbuf) {
+				qdf_nbuf_unmap_single(qdf_dev,
+						wmi_desc->nbuf,
+						QDF_DMA_TO_DEVICE);
 				cds_packet_free(wmi_desc->nbuf);
+			}
 		}
 		qdf_mem_free(wma_handle->wmi_desc_pool.array);
 		wma_handle->wmi_desc_pool.array = NULL;
@@ -2620,6 +2631,7 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 	struct wmi_mgmt_params mgmt_param = {0};
 	struct wmi_desc_t *wmi_desc = NULL;
 	ol_pdev_handle ctrl_pdev;
+	bool is_5g = false;
 
 	if (NULL == wma_handle) {
 		WMA_LOGE("wma_handle is NULL");
@@ -2952,6 +2964,9 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 		}
 	}
 
+	if (CDS_IS_CHANNEL_5GHZ(wma_handle->interfaces[vdev_id].channel))
+		is_5g = true;
+
 	if (WMI_SERVICE_IS_ENABLED(wma_handle->wmi_service_bitmap,
 				   WMI_SERVICE_MGMT_TX_WMI)) {
 		mgmt_param.tx_frame = tx_frame;
@@ -2965,7 +2980,7 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 		 * other than 1Mbps and 6 Mbps
 		 */
 		if (rid < RATEID_DEFAULT &&
-		    (rid != RATEID_1MBPS && rid != RATEID_6MBPS)) {
+		    (rid != RATEID_1MBPS) && !(rid == RATEID_6MBPS && is_5g)) {
 			WMA_LOGD(FL("using rate id: %d for Tx"), rid);
 			mgmt_param.tx_params_valid = true;
 			wma_update_tx_send_params(&mgmt_param.tx_param, rid);
@@ -3035,7 +3050,7 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 		 * @ Discrete : Target Download Complete
 		 */
 		qdf_status =
-			qdf_wait_single_event(&wma_handle->
+			qdf_wait_for_event_completion(&wma_handle->
 					      tx_frm_download_comp_event,
 					      WMA_TX_FRAME_COMPLETE_TIMEOUT);
 
@@ -3051,7 +3066,8 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 			 */
 
 			/* display scheduler stats */
-			ol_txrx_display_stats(WLAN_SCHEDULER_STATS);
+			ol_txrx_display_stats(WLAN_SCHEDULER_STATS,
+					QDF_STATS_VERB_LVL_HIGH);
 		}
 	}
 
@@ -3217,7 +3233,7 @@ void wma_tx_abort(uint8_t vdev_id)
 
 	iface = &wma->interfaces[vdev_id];
 	if (!iface->handle) {
-		WMA_LOGE("%s: Failed to get iface handle: %p",
+		WMA_LOGE("%s: Failed to get iface handle: %pK",
 			 __func__, iface->handle);
 		return;
 	}
@@ -3233,7 +3249,6 @@ void wma_tx_abort(uint8_t vdev_id)
 					 &param);
 }
 
-#if defined(FEATURE_LRO)
 /**
  * wma_lro_config_cmd() - process the LRO config command
  * @wma: Pointer to WMA handle
@@ -3268,7 +3283,6 @@ QDF_STATUS wma_lro_config_cmd(tp_wma_handle wma_handle,
 	return wmi_unified_lro_config_cmd(wma_handle->wmi_handle,
 						&wmi_lro_cmd);
 }
-#endif
 
 /**
  * wma_indicate_err() - indicate an error to the protocol stack

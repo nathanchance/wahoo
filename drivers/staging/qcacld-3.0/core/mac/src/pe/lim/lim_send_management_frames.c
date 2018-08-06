@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -209,7 +209,7 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			      uint8_t channel,
 			      tSirMacAddr self_macaddr,
 			      uint32_t dot11mode,
-			      uint32_t additional_ielen, uint8_t *additional_ie)
+			      uint16_t *additional_ielen, uint8_t *additional_ie)
 {
 	tDot11fProbeRequest pr;
 	uint32_t status, bytes, payload;
@@ -223,10 +223,14 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	uint8_t sme_sessionid = 0;
 	bool is_vht_enabled = false;
 	uint8_t txPower;
-	uint16_t addn_ielen = additional_ielen;
+	uint16_t addn_ielen = 0;
 	bool extracted_ext_cap_flag = false;
 	tDot11fIEExtCap extracted_ext_cap;
 	tSirRetStatus sir_status;
+	uint8_t *qcn_ie = NULL;
+
+	if (additional_ielen)
+		addn_ielen = *additional_ielen;
 
 	/* The probe req should not send 11ac capabilieties if band is 2.4GHz,
 	 * unless enableVhtFor24GHz is enabled in INI. So if enableVhtFor24GHz
@@ -347,9 +351,6 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		populate_dot11f_ext_cap(mac_ctx, is_vht_enabled, &pr.ExtCap,
 			pesession);
 
-	if (mac_ctx->roam.configParam.qcn_ie_support)
-		populate_dot11f_qcn_ie(&pr.QCN_IE);
-
 	if (addn_ielen) {
 		qdf_mem_zero((uint8_t *)&extracted_ext_cap,
 			sizeof(tDot11fIEExtCap));
@@ -370,8 +371,16 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 					(&extracted_ext_cap);
 			extracted_ext_cap_flag =
 				(extracted_ext_cap.num_bytes > 0);
+			if (additional_ielen)
+				*additional_ielen = addn_ielen;
 		}
+		qcn_ie = cfg_get_vendor_ie_ptr_from_oui(mac_ctx,
+				SIR_MAC_QCN_OUI_TYPE, SIR_MAC_QCN_OUI_TYPE_SIZE,
+				additional_ie, addn_ielen);
 	}
+	/* Add qcn_ie only if qcn ie is not present in additional_ie */
+	if (mac_ctx->roam.configParam.qcn_ie_support && !qcn_ie)
+		populate_dot11f_qcn_ie(&pr.QCN_IE);
 
 	/*
 	 * Extcap IE now support variable length, merge Extcap IE from addn_ie
@@ -1222,25 +1231,21 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 			populate_dot11f_vht_operation(mac_ctx, pe_session,
 					&frm.VHTOperation);
 			is_vht = true;
-		} else {
-			/* Advertise 1x1 if either is HT-STA */
-			if (frm.HTCaps.present && mac_ctx->hw_dbs_capable)
-				frm.HTCaps.supportedMCSSet[1] = 0;
 		}
+
 		if (pe_session->vhtCapability &&
 		    pe_session->vendor_vht_sap &&
 		    (assoc_req != NULL) &&
 		    assoc_req->vendor_vht_ie.VHTCaps.present) {
 			pe_debug("Populate Vendor VHT IEs in Assoc Rsponse");
 			frm.vendor_vht_ie.present = 1;
-			frm.vendor_vht_ie.type =
-				pe_session->vendor_specific_vht_ie_type;
 			frm.vendor_vht_ie.sub_type =
 				pe_session->vendor_specific_vht_ie_sub_type;
-
 			frm.vendor_vht_ie.VHTCaps.present = 1;
 			populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm.vendor_vht_ie.VHTCaps);
+			populate_dot11f_vht_operation(mac_ctx, pe_session,
+					&frm.vendor_vht_ie.VHTOperation);
 			is_vht = true;
 		}
 		populate_dot11f_ext_cap(mac_ctx, is_vht, &frm.ExtCap,
@@ -1607,6 +1612,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			      tLimMlmAssocReq *mlm_assoc_req,
 			      tpPESession pe_session)
 {
+	int ret;
 	tDot11fAssocRequest *frm;
 	uint16_t caps;
 	uint8_t *frame;
@@ -1644,6 +1650,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	/* check this early to avoid unncessary operation */
 	if (NULL == pe_session->pLimJoinReq) {
 		pe_err("pe_session->pLimJoinReq is NULL");
+		qdf_mem_free(mlm_assoc_req);
 		return;
 	}
 	add_ie_len = pe_session->pLimJoinReq->addIEAssoc.length;
@@ -1652,6 +1659,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	frm = qdf_mem_malloc(sizeof(tDot11fAssocRequest));
 	if (NULL == frm) {
 		pe_err("Unable to allocate memory");
+		qdf_mem_free(mlm_assoc_req);
 		return;
 	}
 	qdf_mem_set((uint8_t *) frm, sizeof(tDot11fAssocRequest), 0);
@@ -1823,12 +1831,14 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			pe_session->is_vendor_specific_vhtcaps) {
 		pe_debug("Populate Vendor VHT IEs in Assoc Request");
 		frm->vendor_vht_ie.present = 1;
-		frm->vendor_vht_ie.type =
-			pe_session->vendor_specific_vht_ie_type;
 		frm->vendor_vht_ie.sub_type =
 			pe_session->vendor_specific_vht_ie_sub_type;
-
 		frm->vendor_vht_ie.VHTCaps.present = 1;
+		if (!mac_ctx->roam.configParam.enable_subfee_vendor_vhtie &&
+		    pe_session->vht_config.su_beam_formee) {
+			pe_debug("Disable SU beamformee for vendor IE");
+			pe_session->vht_config.su_beam_formee = 0;
+		}
 		populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm->vendor_vht_ie.VHTCaps);
 		vht_enabled = true;
@@ -1918,9 +1928,14 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	 * before packing the frm structure. In this way, the IE ordering
 	 * which the latest 802.11 spec mandates is maintained.
 	 */
-	if (add_ie_len)
-		dot11f_unpack_assoc_request(mac_ctx, add_ie,
+	if (add_ie_len) {
+		ret = dot11f_unpack_assoc_request(mac_ctx, add_ie,
 					    add_ie_len, frm, true);
+		if (DOT11F_FAILED(ret)) {
+			pe_err("unpack failed, ret: 0x%x", ret);
+			goto end;
+		}
+	}
 
 	status = dot11f_get_packed_assoc_request_size(mac_ctx, frm, &payload);
 	if (DOT11F_FAILED(status)) {
@@ -1956,8 +1971,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		lim_post_sme_message(mac_ctx, LIM_MLM_ASSOC_CNF,
 			(uint32_t *) &assoc_cnf);
 
-		qdf_mem_free(frm);
-		return;
+		goto end;
 	}
 	/* Paranoia: */
 	qdf_mem_set(frame, bytes, 0);
@@ -1972,8 +1986,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	if (DOT11F_FAILED(status)) {
 		pe_err("Assoc request pack failure (0x%08x)", status);
 		cds_packet_free((void *)packet);
-		qdf_mem_free(frm);
-		return;
+		goto end;
 	} else if (DOT11F_WARNED(status)) {
 		pe_warn("Assoc request pack warning (0x%08x)", status);
 	}
@@ -1994,8 +2007,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 					pe_session, assoc_ack_status,
 					eSIR_FAILURE);
 			cds_packet_free((void *)packet);
-			qdf_mem_free(frm);
-			return;
+			goto end;
 		}
 	}
 
@@ -2048,10 +2060,10 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		lim_diag_event_report(mac_ctx, WLAN_PE_DIAG_ASSOC_ACK_EVENT,
 				pe_session, assoc_ack_status, eSIR_FAILURE);
 		/* Pkt will be freed up by the callback */
-		qdf_mem_free(frm);
-		return;
+		goto end;
 	}
 
+end:
 	/* Free up buffer allocated for mlm_assoc_req */
 	qdf_mem_free(mlm_assoc_req);
 	mlm_assoc_req = NULL;
@@ -2074,7 +2086,8 @@ static QDF_STATUS lim_auth_tx_complete_cnf(tpAniSirGlobal mac_ctx,
 	uint16_t auth_ack_status;
 	uint16_t reason_code;
 
-	pe_debug("tx_complete= %d", tx_complete);
+	pe_debug("tx_complete = %d %s", tx_complete,
+		(tx_complete ? "success":"fail"));
 	if (tx_complete) {
 		mac_ctx->auth_ack_status = LIM_AUTH_ACK_RCD_SUCCESS;
 		auth_ack_status = ACKED;
@@ -2306,7 +2319,14 @@ alloc_packet:
 
 		if (challenge_req) {
 			if (body_len < SIR_MAC_AUTH_CHALLENGE_BODY_LEN) {
-				qdf_mem_copy(body, (uint8_t *)&auth_frame->type,
+				/* copy challenge IE id, len, challenge text */
+				*body = auth_frame->type;
+				body++;
+				body_len -= sizeof(uint8_t);
+				*body = auth_frame->length;
+				body++;
+				body_len -= sizeof(uint8_t);
+				qdf_mem_copy(body, auth_frame->challengeText,
 					     body_len);
 				pe_err("Incomplete challenge info: length: %d, expected: %d",
 				       body_len,
@@ -2458,7 +2478,7 @@ QDF_STATUS lim_send_deauth_cnf(tpAniSirGlobal pMac)
 #endif
 				 (psessionEntry->isFastRoamIniFeatureEnabled) ||
 				 (psessionEntry->is11Rconnection))) {
-			pe_debug("FT Preauth (%p,%d) Deauth rc %d src = %d",
+			pe_debug("FT Preauth (%pK,%d) Deauth rc %d src = %d",
 					psessionEntry,
 					psessionEntry->peSessionId,
 					pMlmDeauthReq->reasonCode,
@@ -2555,7 +2575,7 @@ QDF_STATUS lim_send_disassoc_cnf(tpAniSirGlobal mac_ctx)
 		if (LIM_IS_STA_ROLE(pe_session) &&
 			(disassoc_req->reasonCode !=
 				eSIR_MAC_DISASSOC_DUE_TO_FTHANDOFF_REASON)) {
-			pe_debug("FT Preauth Session (%p,%d) Clean up"
+			pe_debug("FT Preauth Session (%pK,%d) Clean up"
 #ifdef FEATURE_WLAN_ESE
 				" isESE %d"
 #endif
@@ -2644,6 +2664,7 @@ lim_send_disassoc_mgmt_frame(tpAniSirGlobal pMac,
 	uint8_t txFlag = 0;
 	uint32_t val = 0;
 	uint8_t smeSessionId = 0;
+
 	if (NULL == psessionEntry) {
 		return;
 	}
@@ -3466,6 +3487,7 @@ lim_send_extended_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 		uint8_t new_channel, uint8_t count, tpPESession session_entry)
 {
 	tDot11fext_channel_switch_action_frame frm;
+	tLimWiderBWChannelSwitchInfo *wide_bw_ie;
 	uint8_t                  *frame;
 	tpSirMacMgmtHdr          mac_hdr;
 	uint32_t                 num_bytes, n_payload, status;
@@ -3473,6 +3495,7 @@ lim_send_extended_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 	QDF_STATUS               qdf_status;
 	uint8_t                  txFlag = 0;
 	uint8_t                  sme_session_id = 0;
+	uint8_t                  ch_spacing;
 
 	if (session_entry == NULL) {
 		pe_err("Session entry is NULL!!!");
@@ -3491,6 +3514,25 @@ lim_send_extended_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 	frm.ext_chan_switch_ann_action.new_channel = new_channel;
 	frm.ext_chan_switch_ann_action.switch_count = count;
 
+	ch_spacing = cds_reg_dmn_get_chanwidth_from_opclass(
+			mac_ctx->scan.countryCodeCurrent, new_channel,
+			new_op_class);
+	pe_debug("wrapper: ch_spacing %hu", ch_spacing);
+
+	if ((ch_spacing == 80) || (ch_spacing == 160)) {
+		wide_bw_ie = &session_entry->gLimWiderBWChannelSwitch;
+		frm.WiderBWChanSwitchAnn.newChanWidth =
+			wide_bw_ie->newChanWidth;
+		frm.WiderBWChanSwitchAnn.newCenterChanFreq0 =
+			wide_bw_ie->newCenterChanFreq0;
+		frm.WiderBWChanSwitchAnn.newCenterChanFreq1 =
+			wide_bw_ie->newCenterChanFreq1;
+		frm.WiderBWChanSwitchAnn.present = 1;
+		pe_debug("wrapper: width:%d f0:%d f1:%d",
+			 frm.WiderBWChanSwitchAnn.newChanWidth,
+			 frm.WiderBWChanSwitchAnn.newCenterChanFreq0,
+			 frm.WiderBWChanSwitchAnn.newCenterChanFreq1);
+	}
 
 	status = dot11f_get_packed_ext_channel_switch_action_frame_size(mac_ctx,
 							    &frm, &n_payload);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,6 +60,8 @@ typedef struct {
 	uint16_t module_trace_level;
 	unsigned char module_name_str[4];
 } module_trace_info;
+
+#define DP_TRACE_META_DATA_STRLEN 50
 
 #define QDF_DEFAULT_TRACE_LEVEL	\
 	((1 << QDF_TRACE_LEVEL_FATAL) | (1 << QDF_TRACE_LEVEL_ERROR))
@@ -289,6 +291,48 @@ void qdf_snprintf(char *str_buffer, unsigned int size, char *str_format, ...)
 qdf_export_symbol(qdf_snprintf);
 
 #ifdef QDF_ENABLE_TRACING
+void qdf_vtrace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
+		   char *str_format, va_list val)
+{
+	char str_buffer[QDF_TRACE_BUFFER_SIZE];
+	int n;
+
+	/* Print the trace message when the desired level bit is set in
+	 * the module tracel level mask
+	 */
+	if (g_qdf_trace_info[module].module_trace_level &
+	    QDF_TRACE_LEVEL_TO_MODULE_BITMASK(level)) {
+		/* the trace level strings in an array.  these are ordered in
+		 * the same order as the trace levels are defined in the enum
+		 * (see QDF_TRACE_LEVEL) so we can index into this array with
+		 * the level and get the right string. The qdf trace levels
+		 * are... none, Fatal, Error, Warning, Info, info_high, info_med,
+		 * info_low, Debug
+		 */
+		static const char * const TRACE_LEVEL_STR[] = { "  ", "F ",
+				"E ", "W ", "I ", "IH", "IM", "IL", "D" };
+
+		/* print the prefix string into the string buffer... */
+		n = snprintf(str_buffer, QDF_TRACE_BUFFER_SIZE,
+			     "wlan: [%d:%2s:%3s] ",
+			     in_interrupt() ? 0 : current->pid,
+			     (char *)TRACE_LEVEL_STR[level],
+			     (char *)g_qdf_trace_info[module].module_name_str);
+
+		/* print the formatted log message after the prefix string */
+		if ((n >= 0) && (n < QDF_TRACE_BUFFER_SIZE)) {
+			vsnprintf(str_buffer + n, QDF_TRACE_BUFFER_SIZE - n,
+				  str_format, val);
+#if defined(WLAN_LOGGING_SOCK_SVC_ENABLE)
+			wlan_log_to_user(level, (char *)str_buffer,
+					 strlen(str_buffer));
+#else
+			pr_err("%s\n", str_buffer);
+#endif
+		}
+	}
+}
+qdf_export_symbol(qdf_vtrace_msg);
 
 /**
  * qdf_trace_msg() - externally called trace function
@@ -308,46 +352,11 @@ qdf_export_symbol(qdf_snprintf);
 void qdf_trace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
 		   char *str_format, ...)
 {
-	char str_buffer[QDF_TRACE_BUFFER_SIZE];
-	int n;
+	va_list val;
 
-	/* Print the trace message when the desired level bit is set in
-	 * the module tracel level mask
-	 */
-	if (g_qdf_trace_info[module].module_trace_level &
-	    QDF_TRACE_LEVEL_TO_MODULE_BITMASK(level)) {
-		/* the trace level strings in an array.  these are ordered in
-		 * the same order as the trace levels are defined in the enum
-		 * (see QDF_TRACE_LEVEL) so we can index into this array with
-		 * the level and get the right string. The qdf trace levels
-		 * are... none, Fatal, Error, Warning, Info, info_high, info_med,
-		 * info_low, Debug
-		 */
-		static const char * const TRACE_LEVEL_STR[] = { "  ", "F ",
-				"E ", "W ", "I ", "IH", "IM", "IL", "D" };
-		va_list val;
-
-		va_start(val, str_format);
-		/* print the prefix string into the string buffer... */
-		n = snprintf(str_buffer, QDF_TRACE_BUFFER_SIZE,
-			     "wlan: [%d:%2s:%3s] ",
-			     in_interrupt() ? 0 : current->pid,
-			     (char *)TRACE_LEVEL_STR[level],
-			     (char *)g_qdf_trace_info[module].module_name_str);
-
-		/* print the formatted log message after the prefix string */
-		if ((n >= 0) && (n < QDF_TRACE_BUFFER_SIZE)) {
-			vsnprintf(str_buffer + n, QDF_TRACE_BUFFER_SIZE - n,
-				  str_format, val);
-#if defined(WLAN_LOGGING_SOCK_SVC_ENABLE)
-			wlan_log_to_user(level, (char *)str_buffer,
-					 strlen(str_buffer));
-#else
-			pr_err("%s\n", str_buffer);
-#endif
-		}
-		va_end(val);
-	}
+	va_start(val, str_format);
+	qdf_vtrace_msg(module, level, str_format, val);
+	va_end(val);
 }
 qdf_export_symbol(qdf_trace_msg);
 
@@ -396,7 +405,7 @@ qdf_export_symbol(qdf_trace_display);
 
 #define ROW_SIZE 16
 /* Buffer size = data bytes(2 hex chars plus space) + NULL */
-#define BUFFER_SIZE ((ROW_SIZE * 3) + 1)
+#define BUFFER_SIZE ((QDF_DP_TRACE_RECORD_SIZE * 3) + 1)
 
 /**
  * qdf_trace_hex_dump() - externally called hex dump function
@@ -793,9 +802,34 @@ QDF_STATUS qdf_state_info_dump_all(char *buf, uint16_t size,
 }
 qdf_export_symbol(qdf_state_info_dump_all);
 
+#ifdef CONFIG_KALLSYMS
+inline int qdf_sprint_symbol(char *buffer, void *addr)
+{
+	return sprint_symbol(buffer, (unsigned long)addr);
+}
+#else
+int qdf_sprint_symbol(char *buffer, void *addr)
+{
+	if (!buffer)
+		return 0;
+
+	buffer[0] = '\0';
+	return 1;
+}
+#endif
+qdf_export_symbol(qdf_sprint_symbol);
+
 #ifdef FEATURE_DP_TRACE
+#define QDF_DP_TRACE_PREPEND_STR_SIZE 100
+/*
+ * one dp trace record can't be greater than 300 bytes.
+ * Max Size will be QDF_DP_TRACE_PREPEND_STR_SIZE(100) + BUFFER_SIZE(121).
+ * Always make sure to change this QDF_DP_TRACE_MAX_RECORD_SIZE
+ * value accordingly whenever above two mentioned MACRO value changes.
+ */
+#define QDF_DP_TRACE_MAX_RECORD_SIZE 300
 static void qdf_dp_unused(struct qdf_dp_trace_record_s *record,
-			  uint16_t index, bool live)
+			  uint16_t index, u8 info)
 {
 	qdf_print("%s: QDF_DP_TRACE_MAX event should not be generated",
 		  __func__);
@@ -840,6 +874,11 @@ void qdf_dp_trace_init(bool live_mode_config, uint8_t thresh,
 	for (i = 0; i < ARRAY_SIZE(qdf_dp_trace_cb_table); i++)
 		qdf_dp_trace_cb_table[i] = qdf_dp_display_record;
 
+	qdf_dp_trace_cb_table[QDF_DP_TRACE_TX_PACKET_RECORD] =
+		qdf_dp_trace_cb_table[QDF_DP_TRACE_RX_PACKET_RECORD] =
+		qdf_dp_trace_cb_table[QDF_DP_TRACE_DROP_PACKET_RECORD] =
+		qdf_dp_display_data_pkt_record;
+
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_TXRX_PACKET_PTR_RECORD] =
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD] =
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_FREE_PACKET_PTR_RECORD] =
@@ -848,7 +887,7 @@ void qdf_dp_trace_init(bool live_mode_config, uint8_t thresh,
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_DHCP_PACKET_RECORD] =
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_ARP_PACKET_RECORD] =
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_ICMP_PACKET_RECORD] =
-	qdf_dp_trace_cb_table[QDF_DP_TRACE_ICMPV6_PACKET_RECORD] =
+	qdf_dp_trace_cb_table[QDF_DP_TRACE_ICMPv6_PACKET_RECORD] =
 						qdf_dp_display_proto_pkt;
 	qdf_dp_trace_cb_table[QDF_DP_TRACE_MGMT_PACKET_RECORD] =
 					qdf_dp_display_mgmt_pkt;
@@ -955,32 +994,50 @@ void qdf_dp_trace_set_track(qdf_nbuf_t nbuf, enum qdf_proto_dir dir)
 qdf_export_symbol(qdf_dp_trace_set_track);
 
 #define DPTRACE_PRINT(args...) \
-	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG, ## args)
+	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO_HIGH, ## args)
+
+/* Number of bytes to be grouped together while printing DP-Trace data */
+#define QDF_DUMP_DP_GROUP_SIZE 6
 
 /**
- * dump_hex_trace() - Display the data in buffer
+ * dump_dp_hex_trace() - Display the data in buffer
  * @str:     string to prepend the hexdump with.
  * @buf:     buffer which contains data to be displayed
  * @buf_len: defines the size of the data to be displayed
  *
- * Return: None
+ * Return: QDF_STATUS
  */
-static void dump_dp_hex_trace(char *str, uint8_t *buf, uint8_t buf_len)
+static QDF_STATUS
+dump_dp_hex_trace(char *prepend_str, uint8_t *inbuf, uint8_t inbuf_len)
 {
-	unsigned char linebuf[BUFFER_SIZE];
-	const u8 *ptr = buf;
-	int i, linelen, remaining = buf_len;
+	unsigned char outbuf[BUFFER_SIZE];
+	const u8 *inbuf_ptr = inbuf;
+	char *outbuf_ptr = outbuf;
+	int outbytes_written = 0;
 
-	/* Dump the bytes in the last line */
-	for (i = 0; i < buf_len; i += ROW_SIZE) {
-		linelen = min(remaining, ROW_SIZE);
-		remaining -= ROW_SIZE;
+	if (!inbuf || inbuf_len < 0)
+		return QDF_STATUS_E_INVAL;
 
-		hex_dump_to_buffer(ptr + i, linelen, ROW_SIZE, 1,
-				linebuf, sizeof(linebuf), false);
+	qdf_mem_set(outbuf, 0, sizeof(outbuf));
+	do {
+		outbytes_written += scnprintf(outbuf_ptr,
+					BUFFER_SIZE - outbytes_written,
+					"%02x", *inbuf_ptr);
+		outbuf_ptr = outbuf + outbytes_written;
 
-		DPTRACE_PRINT("DPT: %s %s", str, linebuf);
-	}
+		if ((inbuf_ptr - inbuf) &&
+		    (inbuf_ptr - inbuf + 1) % QDF_DUMP_DP_GROUP_SIZE == 0) {
+			outbytes_written +=
+				scnprintf(outbuf_ptr,
+					  BUFFER_SIZE - outbytes_written,
+					  " ");
+			outbuf_ptr = outbuf + outbytes_written;
+		}
+		inbuf_ptr++;
+	} while (inbuf_ptr < (inbuf + inbuf_len));
+	DPTRACE_PRINT("%s %s", prepend_str, outbuf);
+
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -1003,20 +1060,22 @@ const char *qdf_dp_code_to_string(enum QDF_DP_TRACE_ID code)
 		return "ARP:";
 	case QDF_DP_TRACE_ICMP_PACKET_RECORD:
 		return "ICMP:";
-	case QDF_DP_TRACE_ICMPV6_PACKET_RECORD:
-		return "ICMPV6:";
+	case QDF_DP_TRACE_ICMPv6_PACKET_RECORD:
+		return "ICMPv6:";
 	case QDF_DP_TRACE_MGMT_PACKET_RECORD:
 		return "MGMT:";
 	case QDF_DP_TRACE_EVENT_RECORD:
 		return "EVENT:";
 	case QDF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD:
 		return "HDD: TX: PTR:";
-	case QDF_DP_TRACE_HDD_TX_PACKET_RECORD:
-		return "HDD: TX: DATA:";
+	case QDF_DP_TRACE_TX_PACKET_RECORD:
+		return "TX:";
 	case QDF_DP_TRACE_CE_PACKET_PTR_RECORD:
 		return "CE: TX: PTR:";
 	case QDF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD:
 		return "CE: TX: FAST: PTR:";
+	case QDF_DP_TRACE_CE_FAST_PACKET_ERR_RECORD:
+		return "CE: TX: FAST: ERR:";
 	case QDF_DP_TRACE_FREE_PACKET_PTR_RECORD:
 		return "FREE: TX: PTR:";
 	case QDF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD:
@@ -1025,8 +1084,8 @@ const char *qdf_dp_code_to_string(enum QDF_DP_TRACE_ID code)
 		return "HTT: RX: OF: PTR:";
 	case QDF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD:
 		return "HDD: RX: PTR:";
-	case QDF_DP_TRACE_HDD_RX_PACKET_RECORD:
-		return "HDD: RX: DATA:";
+	case QDF_DP_TRACE_RX_PACKET_RECORD:
+		return "RX:";
 	case QDF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD:
 		return "TXRX: TX: Q: PTR:";
 	case QDF_DP_TRACE_TXRX_PACKET_PTR_RECORD:
@@ -1085,8 +1144,8 @@ static const char *qdf_dp_type_to_str(enum qdf_proto_type type)
 		return "ARP";
 	case QDF_PROTO_TYPE_ICMP:
 		return "ICMP";
-	case QDF_PROTO_TYPE_ICMPV6:
-		return "ICMPV6";
+	case QDF_PROTO_TYPE_ICMPv6:
+		return "ICMPv6";
 	case QDF_PROTO_TYPE_MGMT:
 		return "MGMT";
 	case QDF_PROTO_TYPE_EVENT:
@@ -1190,20 +1249,104 @@ static bool qdf_dp_enable_check(qdf_nbuf_t nbuf, enum QDF_DP_TRACE_ID code,
 	return true;
 }
 
+static inline
+int qdf_dp_trace_fill_meta_str(char *prepend_str, int size, int index,
+			       u8 info, struct qdf_dp_trace_record_s *record)
+{
+	char buffer[20];
+	int ret = 0;
+	uint8_t live = info & QDF_DP_TRACE_RECORD_INFO_LIVE ? 1 : 0;
+	uint8_t throttled = info & QDF_DP_TRACE_RECORD_INFO_THROTTLED ?
+								1 : 0;
+
+	qdf_mem_set(prepend_str, 0, size);
+	scnprintf(buffer, sizeof(buffer), "%llu", record->time);
+	ret = scnprintf(prepend_str, size,
+			"%sDPT: %04d:%s %s",
+			throttled == 1 ? "*" : "",
+			index,
+			(live == 1) ? "" : buffer,
+			qdf_dp_code_to_string(record->code));
+
+	return ret;
+}
+
+/**
+ * qdf_dp_fill_record_data() - fill meta data and data into the record
+ * @rec_data: pointer to record data
+ * @meta_data: pointer to metadata
+ * @metadata_size: size of metadata
+ * @print: true to print it in kmsg
+ *
+ * Should be called from within a spin_lock for the qdf record.
+ * Fills up rec->data with |metadata|data|
+ *
+ * Return: none
+ */
+static void qdf_dp_fill_record_data
+	(struct qdf_dp_trace_record_s *rec,
+	uint8_t *data, uint8_t data_size,
+	uint8_t *meta_data, uint8_t metadata_size)
+{
+	int32_t available = QDF_DP_TRACE_RECORD_SIZE;
+	uint8_t *rec_data = rec->data;
+	uint8_t data_to_copy = 0;
+
+	qdf_mem_set(rec_data, QDF_DP_TRACE_RECORD_SIZE, 0);
+
+	/* copy meta data */
+	if (meta_data) {
+		if (metadata_size > available) {
+			QDF_TRACE(QDF_MODULE_ID_QDF,
+				  QDF_TRACE_LEVEL_WARN,
+				  "%s: meta data does not fit into the record",
+				  __func__);
+			goto end;
+		}
+		qdf_mem_copy(rec_data, meta_data, metadata_size);
+		available = available - metadata_size;
+	} else {
+		metadata_size = 0;
+	}
+
+	/* copy data */
+	if (data != NULL && (data_size > 0) && (available > 0)) {
+		data_to_copy = data_size;
+		if (data_size > available)
+			data_to_copy = available;
+		qdf_mem_copy(&rec_data[metadata_size], data, data_to_copy);
+	}
+end:
+	rec->size = data_to_copy;
+}
+
 /**
  * qdf_dp_add_record() - add dp trace record
  * @code: dptrace code
  * @data: data pointer
- * @size: size of buffer
- * @print: true to print it in kmsg
+ * @data_size: size of data to be copied
+ * @meta_data: meta data to be prepended to data
+ * @metadata_size: sizeof meta data
+ * @print: whether to print record
  *
  * Return: none
  */
 static void qdf_dp_add_record(enum QDF_DP_TRACE_ID code,
-			      uint8_t *data, uint8_t size, bool print)
+			      uint8_t *data, uint8_t data_size,
+			      uint8_t *meta_data, uint8_t metadata_size,
+			      bool print)
 {
 	struct qdf_dp_trace_record_s *rec = NULL;
 	int index;
+	bool print_this_record = false;
+	u8 info = 0;
+
+	if (code >= QDF_DP_TRACE_MAX) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+			  "invalid record code %u, max code %u", code,
+			  QDF_DP_TRACE_MAX);
+		return;
+	}
 
 	spin_lock_bh(&l_dp_trace_lock);
 
@@ -1235,46 +1378,31 @@ static void qdf_dp_add_record(enum QDF_DP_TRACE_ID code,
 	index = g_qdf_dp_trace_data.tail;
 	rec->code = code;
 	rec->size = 0;
-	if (data != NULL && size > 0) {
-		if (size > QDF_DP_TRACE_RECORD_SIZE)
-			size = QDF_DP_TRACE_RECORD_SIZE;
-
-		rec->size = size;
-		qdf_mem_copy(rec->data, data, size);
-	}
-	qdf_get_time_of_the_day_in_hr_min_sec_usec(rec->time,
-						   sizeof(rec->time));
+	qdf_dp_fill_record_data(rec, data, data_size,
+				meta_data, metadata_size);
+	rec->time = qdf_get_log_timestamp();
 	rec->pid = (in_interrupt() ? 0 : current->pid);
+	if (print || g_qdf_dp_trace_data.force_live_mode) {
+		print_this_record = true;
+	} else if (g_qdf_dp_trace_data.live_mode == 1) {
+		print_this_record = true;
+		g_qdf_dp_trace_data.print_pkt_cnt++;
+		if (g_qdf_dp_trace_data.print_pkt_cnt >
+				g_qdf_dp_trace_data.high_tput_thresh) {
+			g_qdf_dp_trace_data.live_mode = 0;
+			info |= QDF_DP_TRACE_RECORD_INFO_THROTTLED;
+		}
+	}
 	spin_unlock_bh(&l_dp_trace_lock);
 
-	if (rec->code >= QDF_DP_TRACE_MAX) {
-		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-			"invalid record code %u, max code %u", rec->code,
-			QDF_DP_TRACE_MAX);
-		return;
-	}
+	info |= QDF_DP_TRACE_RECORD_INFO_LIVE;
+	if (print_this_record)
+		qdf_dp_trace_cb_table[rec->code] (rec, index, info);
 
-	if (print == true) {
-		qdf_dp_trace_cb_table[rec->code] (rec, index, true);
-		return;
-	}
-
-	spin_lock_bh(&l_dp_trace_lock);
-	g_qdf_dp_trace_data.print_pkt_cnt++;
-	if ((g_qdf_dp_trace_data.live_mode == 1) &&
-	    (g_qdf_dp_trace_data.print_pkt_cnt >
-				g_qdf_dp_trace_data.high_tput_thresh))
-		g_qdf_dp_trace_data.live_mode = 0;
-	spin_unlock_bh(&l_dp_trace_lock);
-
-	if (g_qdf_dp_trace_data.live_mode == true) {
-		qdf_dp_trace_cb_table[rec->code] (rec, index, true);
-		return;
-	}
 }
 
 /**
- * qdf_log_icmpv6_pkt() - log ICMPV6 packet
+ * qdf_log_icmpv6_pkt() - log ICMPv6 packet
  * @session_id: vdev_id
  * @skb: skb pointer
  * @dir: direction
@@ -1286,17 +1414,17 @@ static bool qdf_log_icmpv6_pkt(uint8_t session_id, struct sk_buff *skb,
 {
 	enum qdf_proto_subtype subtype;
 
-	if ((qdf_dp_get_proto_bitmap() & QDF_NBUF_PKT_TRAC_TYPE_ICMPV6) &&
-		((dir == QDF_TX && QDF_NBUF_CB_PACKET_TYPE_ICMPV6 ==
+	if ((qdf_dp_get_proto_bitmap() & QDF_NBUF_PKT_TRAC_TYPE_ICMPv6) &&
+		((dir == QDF_TX && QDF_NBUF_CB_PACKET_TYPE_ICMPv6 ==
 			QDF_NBUF_CB_GET_PACKET_TYPE(skb)) ||
 		 (dir == QDF_RX && qdf_nbuf_is_icmpv6_pkt(skb) == true))) {
 
 		subtype = qdf_nbuf_get_icmpv6_subtype(skb);
 		DPTRACE(qdf_dp_trace_proto_pkt(
-			QDF_DP_TRACE_ICMPV6_PACKET_RECORD,
+			QDF_DP_TRACE_ICMPv6_PACKET_RECORD,
 			session_id, (skb->data + QDF_NBUF_SRC_MAC_OFFSET),
 			(skb->data + QDF_NBUF_DEST_MAC_OFFSET),
-			QDF_PROTO_TYPE_ICMPV6, subtype, dir, true));
+			QDF_PROTO_TYPE_ICMPv6, subtype, dir, true));
 		if (dir == QDF_TX)
 			QDF_NBUF_CB_TX_DP_TRACE(skb) = 1;
 		else if (dir == QDF_RX)
@@ -1400,6 +1528,23 @@ static bool qdf_log_eapol_pkt(uint8_t session_id, struct sk_buff *skb,
 		else if (QDF_RX == dir)
 			QDF_NBUF_CB_RX_DP_TRACE(skb) = 1;
 
+		switch (subtype) {
+		case QDF_PROTO_EAPOL_M1:
+			g_qdf_dp_trace_data.eapol_m1++;
+			break;
+		case QDF_PROTO_EAPOL_M2:
+			g_qdf_dp_trace_data.eapol_m2++;
+			break;
+		case QDF_PROTO_EAPOL_M3:
+			g_qdf_dp_trace_data.eapol_m3++;
+			break;
+		case QDF_PROTO_EAPOL_M4:
+			g_qdf_dp_trace_data.eapol_m4++;
+			break;
+		default:
+			g_qdf_dp_trace_data.eapol_others++;
+			break;
+		}
 		QDF_NBUF_CB_DP_TRACE_PRINT(skb) = true;
 		return true;
 	}
@@ -1435,6 +1580,27 @@ static bool qdf_log_dhcp_pkt(uint8_t session_id, struct sk_buff *skb,
 			QDF_NBUF_CB_RX_DP_TRACE(skb) = 1;
 
 		QDF_NBUF_CB_DP_TRACE_PRINT(skb) = true;
+		switch (subtype) {
+		case QDF_PROTO_DHCP_DISCOVER:
+			g_qdf_dp_trace_data.dhcp_disc++;
+			break;
+		case QDF_PROTO_DHCP_OFFER:
+			g_qdf_dp_trace_data.dhcp_off++;
+			break;
+		case QDF_PROTO_DHCP_REQUEST:
+			g_qdf_dp_trace_data.dhcp_req++;
+			break;
+		case QDF_PROTO_DHCP_ACK:
+			g_qdf_dp_trace_data.dhcp_ack++;
+			break;
+		case QDF_PROTO_DHCP_NACK:
+			g_qdf_dp_trace_data.dhcp_nack++;
+			break;
+		default:
+			g_qdf_dp_trace_data.eapol_others++;
+			break;
+		}
+
 		return true;
 	}
 	return false;
@@ -1518,18 +1684,21 @@ qdf_export_symbol(qdf_dp_trace_log_pkt);
  * Return: none
  */
 void qdf_dp_display_mgmt_pkt(struct qdf_dp_trace_record_s *record,
-			      uint16_t index, bool live)
+			      uint16_t index, u8 info)
 {
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
 	struct qdf_dp_trace_mgmt_buf *buf =
 		(struct qdf_dp_trace_mgmt_buf *)record->data;
 
-	DPTRACE_PRINT("DPT: %04d: %s [%d] [%s %s %s]",
-		index,
-		(live == true) ? " " : record->time,
-		buf->vdev_id,
-		qdf_dp_code_to_string(record->code),
-		qdf_dp_type_to_str(buf->type),
-		qdf_dp_subtype_to_str(buf->subtype));
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, info, record);
+
+	DPTRACE_PRINT("%s [%d] [%s %s]",
+		      prepend_str,
+		      buf->vdev_id,
+		      qdf_dp_type_to_str(buf->type),
+		      qdf_dp_subtype_to_str(buf->subtype));
 }
 qdf_export_symbol(qdf_dp_display_mgmt_pkt);
 
@@ -1557,7 +1726,7 @@ void qdf_dp_trace_mgmt_pkt(enum QDF_DP_TRACE_ID code, uint8_t vdev_id,
 	buf.type = type;
 	buf.subtype = subtype;
 	buf.vdev_id = vdev_id;
-	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, true);
+	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, NULL, 0, true);
 }
 qdf_export_symbol(qdf_dp_trace_mgmt_pkt);
 
@@ -1570,18 +1739,20 @@ qdf_export_symbol(qdf_dp_trace_mgmt_pkt);
  * Return: none
  */
 void qdf_dp_display_event_record(struct qdf_dp_trace_record_s *record,
-			      uint16_t index, bool live)
+			      uint16_t index, u8 info)
 {
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
 	struct qdf_dp_trace_event_buf *buf =
 		(struct qdf_dp_trace_event_buf *)record->data;
 
-	DPTRACE_PRINT("DPT: %04d: %s [%d] [%s %s %s]",
-		index,
-		(live == true) ? "" : record->time,
-		buf->vdev_id,
-		qdf_dp_code_to_string(record->code),
-		qdf_dp_type_to_str(buf->type),
-		qdf_dp_subtype_to_str(buf->subtype));
+	qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+				   index, info, record);
+
+	DPTRACE_PRINT("%s [%d] [%s %s]",
+		      prepend_str,
+		      buf->vdev_id,
+		      qdf_dp_type_to_str(buf->type),
+		      qdf_dp_subtype_to_str(buf->subtype));
 }
 qdf_export_symbol(qdf_dp_display_event_record);
 
@@ -1609,7 +1780,7 @@ void qdf_dp_trace_record_event(enum QDF_DP_TRACE_ID code, uint8_t vdev_id,
 	buf.type = type;
 	buf.subtype = subtype;
 	buf.vdev_id = vdev_id;
-	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, true);
+	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, NULL, 0, true);
 }
 qdf_export_symbol(qdf_dp_trace_record_event);
 
@@ -1622,21 +1793,24 @@ qdf_export_symbol(qdf_dp_trace_record_event);
  * Return: none
  */
 void qdf_dp_display_proto_pkt(struct qdf_dp_trace_record_s *record,
-			      uint16_t index, bool live)
+			      uint16_t index, u8 info)
 {
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
 	struct qdf_dp_trace_proto_buf *buf =
 		(struct qdf_dp_trace_proto_buf *)record->data;
 
-	DPTRACE_PRINT("DPT: %04d: %s [%d] [%s%s] SA: "
-		QDF_MAC_ADDRESS_STR " %s DA: "
-		QDF_MAC_ADDRESS_STR,
-		index,
-		(live == true) ? "" : record->time,
-		buf->vdev_id,
-		qdf_dp_code_to_string(record->code),
-		qdf_dp_subtype_to_str(buf->subtype),
-		QDF_MAC_ADDR_ARRAY(buf->sa.bytes),
-		qdf_dp_dir_to_str(buf->dir), QDF_MAC_ADDR_ARRAY(buf->da.bytes));
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, info, record);
+	DPTRACE_PRINT("%s [%d] [%s] SA: "
+		      QDF_MAC_ADDRESS_STR " %s DA: "
+		      QDF_MAC_ADDRESS_STR,
+		      prepend_str,
+		      buf->vdev_id,
+		      qdf_dp_subtype_to_str(buf->subtype),
+		      QDF_MAC_ADDR_ARRAY(buf->sa.bytes),
+		      qdf_dp_dir_to_str(buf->dir),
+		      QDF_MAC_ADDR_ARRAY(buf->da.bytes));
 }
 qdf_export_symbol(qdf_dp_display_proto_pkt);
 
@@ -1673,7 +1847,7 @@ void qdf_dp_trace_proto_pkt(enum QDF_DP_TRACE_ID code,
 	buf.type = type;
 	buf.subtype = subtype;
 	buf.vdev_id = vdev_id;
-	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, print);
+	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, NULL, 0, print);
 }
 qdf_export_symbol(qdf_dp_trace_proto_pkt);
 
@@ -1686,24 +1860,28 @@ qdf_export_symbol(qdf_dp_trace_proto_pkt);
  * Return: none
  */
 void qdf_dp_display_ptr_record(struct qdf_dp_trace_record_s *record,
-				uint16_t index, bool live)
+				uint16_t index, u8 info)
 {
-	char prepend_str[100] = {'\0'};
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
 	struct qdf_dp_trace_ptr_buf *buf =
 		(struct qdf_dp_trace_ptr_buf *)record->data;
 
-	snprintf(prepend_str, sizeof(prepend_str),
-		"%04d: %s [%s] [msdu id %d %s %d]",
-		index,
-		(live == true) ? "" : record->time,
-		qdf_dp_code_to_string(record->code), buf->msdu_id,
-		(record->code == QDF_DP_TRACE_FREE_PACKET_PTR_RECORD) ?
-			"status" : "vdev_id",
-		 buf->status);
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, info, record);
 
-	if (live == true) {
+	if (loc < sizeof(prepend_str))
+		scnprintf(&prepend_str[loc], sizeof(prepend_str) - loc,
+			  "[msdu id %d %s %d]",
+			  buf->msdu_id,
+			  (record->code ==
+				QDF_DP_TRACE_FREE_PACKET_PTR_RECORD) ?
+			  "status" : "vdev_id",
+			  buf->status);
+
+	if (info & QDF_DP_TRACE_RECORD_INFO_LIVE) {
 		/* In live mode donot dump the contents of the cookie */
-		DPTRACE_PRINT("DPT: %s", prepend_str);
+		DPTRACE_PRINT("%s", prepend_str);
 	} else {
 		dump_dp_hex_trace(prepend_str, (uint8_t *)&buf->cookie,
 			sizeof(buf->cookie));
@@ -1736,46 +1914,97 @@ void qdf_dp_trace_ptr(qdf_nbuf_t nbuf, enum QDF_DP_TRACE_ID code,
 	qdf_mem_copy(&buf.cookie, data, size);
 	buf.msdu_id = msdu_id;
 	buf.status = status;
-	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size,
-				QDF_NBUF_CB_DP_TRACE_PRINT(nbuf));
+	qdf_dp_add_record(code, (uint8_t *)&buf, buf_size, NULL, 0,
+			  QDF_NBUF_CB_DP_TRACE_PRINT(nbuf));
 }
 qdf_export_symbol(qdf_dp_trace_ptr);
 
 /**
+ * qdf_dp_trace_data_pkt() - trace data packet
+ * @nbuf  : nbuf which needs to be traced
+ * @code : QDF_DP_TRACE_ID for the packet (TX or RX)
+ * @msdu_id : tx desc id for the nbuf (Only applies to TX packets)
+ * @dir : TX or RX packet direction
+ *
+ * Return: None
+ */
+void qdf_dp_trace_data_pkt(qdf_nbuf_t nbuf,
+	enum QDF_DP_TRACE_ID code, uint16_t msdu_id, enum qdf_proto_dir dir)
+{
+	struct qdf_dp_trace_data_buf buf;
+
+	buf.msdu_id = msdu_id;
+	if (qdf_dp_enable_check(nbuf, code, dir) == false)
+		return;
+
+	qdf_dp_add_record(code, qdf_nbuf_data(nbuf), nbuf->len - nbuf->data_len,
+			  (uint8_t *)&buf, sizeof(struct qdf_dp_trace_data_buf),
+			  (nbuf) ? QDF_NBUF_CB_DP_TRACE_PRINT(nbuf)
+			  : false);
+}
+
+qdf_export_symbol(qdf_dp_trace_data_pkt);
+
+/**
  * qdf_dp_display_trace() - Displays a record in DP trace
- * @pRecord  : pointer to a record in DP trace
- * @recIndex : record index
+ * @record  : pointer to a record in DP trace
+ * @index : record index
  * @live : live mode or dump mode
  *
  * Return: None
  */
-void qdf_dp_display_record(struct qdf_dp_trace_record_s *pRecord,
-				uint16_t recIndex, bool live)
+void qdf_dp_display_record(struct qdf_dp_trace_record_s *record,
+				uint16_t index, u8 info)
 {
-	char prepend_str[50] = {'\0'};
 
-	snprintf(prepend_str, sizeof(prepend_str),
-		"%04d: %s %s",
-		recIndex,
-		(live == true) ? "" : pRecord->time,
-		qdf_dp_code_to_string(pRecord->code));
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
 
-	switch (pRecord->code) {
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, info, record);
+
+	switch (record->code) {
 	case  QDF_DP_TRACE_HDD_TX_TIMEOUT:
 		DPTRACE_PRINT(" %s: HDD TX Timeout", prepend_str);
 		break;
 	case  QDF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT:
 		DPTRACE_PRINT(" %s: HDD  SoftAP TX Timeout", prepend_str);
 		break;
-	case QDF_DP_TRACE_HDD_TX_PACKET_RECORD:
-	case QDF_DP_TRACE_HDD_RX_PACKET_RECORD:
+	case  QDF_DP_TRACE_CE_FAST_PACKET_ERR_RECORD:
+		DPTRACE_PRINT(" %s: CE Fast Packet Error", prepend_str);
+		break;
 	default:
-		dump_dp_hex_trace(prepend_str, pRecord->data, pRecord->size);
+		dump_dp_hex_trace(prepend_str, record->data, record->size);
 		break;
 	};
 }
 qdf_export_symbol(qdf_dp_display_record);
 
+/**
+ * qdf_dp_display_data_pkt_record() - Displays a data packet in DP trace
+ * @record  : pointer to a record in DP trace
+ * @recIndex : record index
+ * @live : live mode or dump mode
+ *
+ * Return: None
+ */
+void qdf_dp_display_data_pkt_record(struct qdf_dp_trace_record_s *record,
+				    uint16_t recIndex, u8 info)
+{
+	int loc;
+	char prepend_str[DP_TRACE_META_DATA_STRLEN + 10];
+	struct qdf_dp_trace_data_buf *buf =
+		(struct qdf_dp_trace_data_buf *)record->data;
+
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 recIndex, info, record);
+	if (loc < sizeof(prepend_str))
+		loc += snprintf(&prepend_str[loc], sizeof(prepend_str) - loc,
+				"[%d]", buf->msdu_id);
+	dump_dp_hex_trace(prepend_str,
+			  &record->data[sizeof(struct qdf_dp_trace_data_buf)],
+			  record->size);
+}
 
 /**
  * qdf_dp_trace() - Stores the data in buffer
@@ -1793,7 +2022,7 @@ void qdf_dp_trace(qdf_nbuf_t nbuf, enum QDF_DP_TRACE_ID code,
 	if (qdf_dp_enable_check(nbuf, code, dir) == false)
 		return;
 
-	qdf_dp_add_record(code, data, size,
+	qdf_dp_add_record(code, data, size, NULL, 0,
 		(nbuf != NULL) ? QDF_NBUF_CB_DP_TRACE_PRINT(nbuf) : false);
 }
 qdf_export_symbol(qdf_dp_trace);
@@ -1818,7 +2047,7 @@ qdf_export_symbol(qdf_dp_trace_spin_lock_init);
  */
 void qdf_dp_trace_disable_live_mode(void)
 {
-	g_qdf_dp_trace_data.live_mode = 0;
+	g_qdf_dp_trace_data.force_live_mode = 0;
 }
 qdf_export_symbol(qdf_dp_trace_disable_live_mode);
 
@@ -1829,7 +2058,7 @@ qdf_export_symbol(qdf_dp_trace_disable_live_mode);
  */
 void qdf_dp_trace_enable_live_mode(void)
 {
-	g_qdf_dp_trace_data.live_mode = 1;
+	g_qdf_dp_trace_data.force_live_mode = 1;
 }
 qdf_export_symbol(qdf_dp_trace_enable_live_mode);
 
@@ -1847,6 +2076,419 @@ void qdf_dp_trace_clear_buffer(void)
 	   MAX_QDF_DP_TRACE_RECORDS * sizeof(struct qdf_dp_trace_record_s));
 }
 qdf_export_symbol(qdf_dp_trace_clear_buffer);
+
+void qdf_dp_trace_dump_stats(void)
+{
+		DPTRACE_PRINT("STATS |DPT: icmp(%u %u) arp(%u %u) icmpv6(%u %u %u %u %u %u) dhcp(%u %u %u %u %u %u) eapol(%u %u %u %u %u)",
+				g_qdf_dp_trace_data.icmp_req,
+				g_qdf_dp_trace_data.icmp_resp,
+				g_qdf_dp_trace_data.arp_req,
+				g_qdf_dp_trace_data.arp_resp,
+				g_qdf_dp_trace_data.icmpv6_req,
+				g_qdf_dp_trace_data.icmpv6_resp,
+				g_qdf_dp_trace_data.icmpv6_ns,
+				g_qdf_dp_trace_data.icmpv6_na,
+				g_qdf_dp_trace_data.icmpv6_rs,
+				g_qdf_dp_trace_data.icmpv6_ra,
+				g_qdf_dp_trace_data.dhcp_disc,
+				g_qdf_dp_trace_data.dhcp_off,
+				g_qdf_dp_trace_data.dhcp_req,
+				g_qdf_dp_trace_data.dhcp_ack,
+				g_qdf_dp_trace_data.dhcp_nack,
+				g_qdf_dp_trace_data.dhcp_others,
+				g_qdf_dp_trace_data.eapol_m1,
+				g_qdf_dp_trace_data.eapol_m2,
+				g_qdf_dp_trace_data.eapol_m3,
+				g_qdf_dp_trace_data.eapol_m4,
+				g_qdf_dp_trace_data.eapol_others);
+}
+qdf_export_symbol(qdf_dp_trace_dump_stats);
+
+/**
+ * qdf_dpt_dump_hex_trace_debugfs() - read data in file
+ * @file: file to read
+ * @str: string to prepend the hexdump with.
+ * @buf: buffer which contains data to be written
+ * @buf_len: defines the size of the data to be written
+ *
+ * Return: None
+ */
+static void qdf_dpt_dump_hex_trace_debugfs(qdf_debugfs_file_t file,
+				char *str, uint8_t *buf, uint8_t buf_len)
+{
+	unsigned char linebuf[BUFFER_SIZE];
+	const u8 *ptr = buf;
+	int i, linelen, remaining = buf_len;
+
+	/* Dump the bytes in the last line */
+	for (i = 0; i < buf_len; i += ROW_SIZE) {
+		linelen = min(remaining, ROW_SIZE);
+		remaining -= ROW_SIZE;
+
+		hex_dump_to_buffer(ptr + i, linelen, ROW_SIZE, 1,
+				linebuf, sizeof(linebuf), false);
+
+		qdf_debugfs_printf(file, "%s %s\n",
+				  str, linebuf);
+	}
+}
+
+/**
+ * qdf_dpt_display_proto_pkt_debugfs() - display proto packet
+ * @file: file to read
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+static void qdf_dpt_display_proto_pkt_debugfs(qdf_debugfs_file_t file,
+				struct qdf_dp_trace_record_s *record,
+				uint32_t index)
+{
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
+	struct qdf_dp_trace_proto_buf *buf =
+		(struct qdf_dp_trace_proto_buf *)record->data;
+
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, 0, record);
+	qdf_debugfs_printf(file, "%s [%d] [%s] SA: "
+			   QDF_MAC_ADDRESS_STR " %s DA: "
+			   QDF_MAC_ADDRESS_STR,
+			   prepend_str,
+			   buf->vdev_id,
+			   qdf_dp_subtype_to_str(buf->subtype),
+			   QDF_MAC_ADDR_ARRAY(buf->sa.bytes),
+			   qdf_dp_dir_to_str(buf->dir),
+			   QDF_MAC_ADDR_ARRAY(buf->da.bytes));
+	qdf_debugfs_printf(file, "\n");
+}
+
+/**
+ * qdf_dpt_display_mgmt_pkt_debugfs() - display mgmt packet
+ * @file: file to read
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+static void qdf_dpt_display_mgmt_pkt_debugfs(qdf_debugfs_file_t file,
+				struct qdf_dp_trace_record_s *record,
+				uint32_t index)
+{
+
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
+	struct qdf_dp_trace_mgmt_buf *buf =
+		(struct qdf_dp_trace_mgmt_buf *)record->data;
+
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, 0, record);
+
+	qdf_debugfs_printf(file, "%s [%d] [%s %s]\n",
+			   prepend_str,
+			   buf->vdev_id,
+			   qdf_dp_type_to_str(buf->type),
+			   qdf_dp_subtype_to_str(buf->subtype));
+
+}
+
+/**
+ * qdf_dpt_display_event_record_debugfs() - display event records
+ * @file: file to read
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+static void qdf_dpt_display_event_record_debugfs(qdf_debugfs_file_t file,
+				struct qdf_dp_trace_record_s *record,
+				uint32_t index)
+{
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
+	struct qdf_dp_trace_event_buf *buf =
+		(struct qdf_dp_trace_event_buf *)record->data;
+
+	qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+				   index, 0, record);
+	qdf_debugfs_printf(file, "%s [%d] [%s %s]\n",
+			   prepend_str,
+			   buf->vdev_id,
+			   qdf_dp_type_to_str(buf->type),
+			   qdf_dp_subtype_to_str(buf->subtype));
+}
+
+/**
+ * qdf_dpt_display_ptr_record_debugfs() - display record ptr
+ * @file: file to read
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+static void qdf_dpt_display_ptr_record_debugfs(qdf_debugfs_file_t file,
+				struct qdf_dp_trace_record_s *record,
+				uint32_t index)
+{
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
+	int loc;
+	struct qdf_dp_trace_ptr_buf *buf =
+		(struct qdf_dp_trace_ptr_buf *)record->data;
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, 0, record);
+
+	if (loc < sizeof(prepend_str))
+		scnprintf(&prepend_str[loc], sizeof(prepend_str) - loc,
+			  "[msdu id %d %s %d]",
+			  buf->msdu_id,
+			  (record->code ==
+				QDF_DP_TRACE_FREE_PACKET_PTR_RECORD) ?
+			  "status" : "vdev_id",
+			  buf->status);
+
+	qdf_dpt_dump_hex_trace_debugfs(file, prepend_str,
+				       (uint8_t *)&buf->cookie,
+				       sizeof(buf->cookie));
+}
+
+/**
+ * qdf_dpt_display_ptr_record_debugfs() - display record
+ * @file: file to read
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+static void qdf_dpt_display_record_debugfs(qdf_debugfs_file_t file,
+				struct qdf_dp_trace_record_s *record,
+				uint32_t index)
+{
+	int loc;
+	char prepend_str[QDF_DP_TRACE_PREPEND_STR_SIZE];
+	struct qdf_dp_trace_data_buf *buf =
+		(struct qdf_dp_trace_data_buf *)record->data;
+
+	loc = qdf_dp_trace_fill_meta_str(prepend_str, sizeof(prepend_str),
+					 index, 0, record);
+	if (loc < sizeof(prepend_str))
+		loc += snprintf(&prepend_str[loc], sizeof(prepend_str) - loc,
+				"[%d]", buf->msdu_id);
+	qdf_dpt_dump_hex_trace_debugfs(file, prepend_str,
+				       record->data, record->size);
+}
+
+uint32_t qdf_dpt_get_curr_pos_debugfs(qdf_debugfs_file_t file,
+				      enum qdf_dpt_debugfs_state state)
+{
+	uint32_t i = 0;
+	uint32_t tail;
+	uint32_t count = g_qdf_dp_trace_data.num;
+
+	if (!g_qdf_dp_trace_data.enable) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
+		  "%s: Tracing Disabled", __func__);
+		return QDF_STATUS_E_EMPTY;
+	}
+
+	if (!count) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
+		  "%s: no packets", __func__);
+		return QDF_STATUS_E_EMPTY;
+	}
+
+	if (state == QDF_DPT_DEBUGFS_STATE_SHOW_IN_PROGRESS)
+		return g_qdf_dp_trace_data.curr_pos;
+
+	qdf_debugfs_printf(file,
+		"DPT: config - bitmap 0x%x verb %u #rec %u live_config %u thresh %u time_limit %u\n",
+		g_qdf_dp_trace_data.proto_bitmap,
+		g_qdf_dp_trace_data.verbosity,
+		g_qdf_dp_trace_data.no_of_record,
+		g_qdf_dp_trace_data.live_mode_config,
+		g_qdf_dp_trace_data.high_tput_thresh,
+		g_qdf_dp_trace_data.thresh_time_limit);
+
+	qdf_debugfs_printf(file,
+		"STATS |DPT: icmp(%u %u) arp(%u %u) icmpv6(%u %u %u %u %u %u) dhcp(%u %u %u %u %u %u) eapol(%u %u %u %u %u)\n",
+		g_qdf_dp_trace_data.icmp_req,
+		g_qdf_dp_trace_data.icmp_resp,
+		g_qdf_dp_trace_data.arp_req,
+		g_qdf_dp_trace_data.arp_resp,
+		g_qdf_dp_trace_data.icmpv6_req,
+		g_qdf_dp_trace_data.icmpv6_resp,
+		g_qdf_dp_trace_data.icmpv6_ns,
+		g_qdf_dp_trace_data.icmpv6_na,
+		g_qdf_dp_trace_data.icmpv6_rs,
+		g_qdf_dp_trace_data.icmpv6_ra,
+		g_qdf_dp_trace_data.dhcp_disc,
+		g_qdf_dp_trace_data.dhcp_off,
+		g_qdf_dp_trace_data.dhcp_req,
+		g_qdf_dp_trace_data.dhcp_ack,
+		g_qdf_dp_trace_data.dhcp_nack,
+		g_qdf_dp_trace_data.dhcp_others,
+		g_qdf_dp_trace_data.eapol_m1,
+		g_qdf_dp_trace_data.eapol_m2,
+		g_qdf_dp_trace_data.eapol_m3,
+		g_qdf_dp_trace_data.eapol_m4,
+		g_qdf_dp_trace_data.eapol_others);
+
+	qdf_debugfs_printf(file,
+		"DPT: Total Records: %d, Head: %d, Tail: %d\n",
+		g_qdf_dp_trace_data.num, g_qdf_dp_trace_data.head,
+		g_qdf_dp_trace_data.tail);
+
+	spin_lock_bh(&l_dp_trace_lock);
+	if (g_qdf_dp_trace_data.head != INVALID_QDF_DP_TRACE_ADDR) {
+		i = g_qdf_dp_trace_data.head;
+		tail = g_qdf_dp_trace_data.tail;
+
+		if (count > g_qdf_dp_trace_data.num)
+			count = g_qdf_dp_trace_data.num;
+
+		if (tail >= (count - 1))
+			i = tail - count + 1;
+		else if (count != MAX_QDF_DP_TRACE_RECORDS)
+			i = MAX_QDF_DP_TRACE_RECORDS - ((count - 1) -
+						     tail);
+		g_qdf_dp_trace_data.curr_pos = 0;
+		g_qdf_dp_trace_data.saved_tail = tail;
+	}
+	spin_unlock_bh(&l_dp_trace_lock);
+	return i;
+}
+qdf_export_symbol(qdf_dpt_get_curr_pos_debugfs);
+
+QDF_STATUS qdf_dpt_dump_stats_debugfs(qdf_debugfs_file_t file,
+				      uint32_t curr_pos)
+{
+	struct qdf_dp_trace_record_s p_record;
+	uint32_t i = curr_pos;
+	uint32_t tail = g_qdf_dp_trace_data.saved_tail;
+
+	if (!g_qdf_dp_trace_data.enable) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+		  "%s: Tracing Disabled", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	/*
+	 * Max dp trace record size should always be less than
+	 * QDF_DP_TRACE_PREPEND_STR_SIZE(100) + BUFFER_SIZE(121).
+	 */
+	if (WARN_ON(QDF_DP_TRACE_MAX_RECORD_SIZE <
+		    QDF_DP_TRACE_PREPEND_STR_SIZE + BUFFER_SIZE))
+		return QDF_STATUS_E_FAILURE;
+
+	spin_lock_bh(&l_dp_trace_lock);
+	p_record = g_qdf_dp_trace_tbl[i];
+	spin_unlock_bh(&l_dp_trace_lock);
+	for (;; ) {
+		/*
+		 * Initially we get file as 1 page size, and
+		 * if remaining size in file is less than one record max size,
+		 * then return so that it gets an extra page.
+		 */
+		if ((file->size - file->count) < QDF_DP_TRACE_MAX_RECORD_SIZE) {
+			spin_lock_bh(&l_dp_trace_lock);
+			g_qdf_dp_trace_data.curr_pos = i;
+			spin_unlock_bh(&l_dp_trace_lock);
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		switch (p_record.code) {
+		case QDF_DP_TRACE_TXRX_PACKET_PTR_RECORD:
+		case QDF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD:
+		case QDF_DP_TRACE_FREE_PACKET_PTR_RECORD:
+			qdf_dpt_display_ptr_record_debugfs(file, &p_record, i);
+			break;
+
+		case QDF_DP_TRACE_EAPOL_PACKET_RECORD:
+		case QDF_DP_TRACE_DHCP_PACKET_RECORD:
+		case QDF_DP_TRACE_ARP_PACKET_RECORD:
+		case QDF_DP_TRACE_ICMP_PACKET_RECORD:
+		case QDF_DP_TRACE_ICMPv6_PACKET_RECORD:
+			qdf_dpt_display_proto_pkt_debugfs(file, &p_record, i);
+			break;
+
+		case QDF_DP_TRACE_MGMT_PACKET_RECORD:
+			qdf_dpt_display_mgmt_pkt_debugfs(file, &p_record, i);
+			break;
+
+		case QDF_DP_TRACE_EVENT_RECORD:
+			qdf_dpt_display_event_record_debugfs(file, &p_record,
+							     i);
+			break;
+
+		case QDF_DP_TRACE_HDD_TX_TIMEOUT:
+			qdf_debugfs_printf(file, "DPT: %04d: %s %s\n",
+				i, p_record.time,
+				qdf_dp_code_to_string(p_record.code));
+			qdf_debugfs_printf(file, "%s: HDD TX Timeout\n");
+			break;
+
+		case QDF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT:
+			qdf_debugfs_printf(file, "%04d: %llu %s\n",
+				i, p_record.time,
+				qdf_dp_code_to_string(p_record.code));
+			qdf_debugfs_printf(file,
+					   "%s: HDD  SoftAP TX Timeout\n");
+			break;
+
+		case QDF_DP_TRACE_CE_FAST_PACKET_ERR_RECORD:
+			qdf_debugfs_printf(file, "DPT: %llu: %s %s\n",
+				i, p_record.time,
+				qdf_dp_code_to_string(p_record.code));
+			qdf_debugfs_printf(file,
+					   "%s: CE Fast Packet Error\n");
+			break;
+
+		case QDF_DP_TRACE_MAX:
+			qdf_debugfs_printf(file,
+				"%s: QDF_DP_TRACE_MAX event should not be generated\n",
+				__func__);
+			break;
+
+		case QDF_DP_TRACE_TX_PACKET_RECORD:
+		case QDF_DP_TRACE_RX_PACKET_RECORD:
+		default:
+			qdf_dpt_display_record_debugfs(file, &p_record, i);
+			break;
+		}
+
+		if (i == tail)
+			break;
+		i += 1;
+
+		spin_lock_bh(&l_dp_trace_lock);
+		if (i == MAX_QDF_DP_TRACE_RECORDS)
+			i = 0;
+
+		p_record = g_qdf_dp_trace_tbl[i];
+		spin_unlock_bh(&l_dp_trace_lock);
+	}
+	return QDF_STATUS_SUCCESS;
+}
+qdf_export_symbol(qdf_dpt_dump_stats_debugfs);
+
+/**
+ * qdf_dpt_set_value_debugfs() - Configure the value to control DP trace
+ * @proto_bitmap: defines the protocol to be tracked
+ * @no_of_records: defines the nth packet which is traced
+ * @verbosity: defines the verbosity level
+ *
+ * Return: None
+ */
+void qdf_dpt_set_value_debugfs(uint8_t proto_bitmap, uint8_t no_of_record,
+			    uint8_t verbosity)
+{
+	if (g_qdf_dp_trace_data.enable) {
+		g_qdf_dp_trace_data.proto_bitmap = proto_bitmap;
+		g_qdf_dp_trace_data.no_of_record = no_of_record;
+		g_qdf_dp_trace_data.verbosity    = verbosity;
+	}
+}
+qdf_export_symbol(qdf_dpt_set_value_debugfs);
+
 
 /**
  * qdf_dp_trace_dump_all() - Dump data from ring buffer via call back functions
@@ -1875,20 +2517,7 @@ void qdf_dp_trace_dump_all(uint32_t count)
 		g_qdf_dp_trace_data.high_tput_thresh,
 		g_qdf_dp_trace_data.thresh_time_limit);
 
-	DPTRACE_PRINT("DPT: stats - tx %u rx %u icmp(%u %u) arp(%u %u)"
-		"icmpv6 (%u %u) icmpv6_ns_na (%u %u) icmpv6_rs_ra (%u %u)",
-		g_qdf_dp_trace_data.tx_count,
-		g_qdf_dp_trace_data.rx_count,
-		g_qdf_dp_trace_data.icmp_req,
-		g_qdf_dp_trace_data.icmp_resp,
-		g_qdf_dp_trace_data.arp_req,
-		g_qdf_dp_trace_data.arp_resp,
-		g_qdf_dp_trace_data.icmpv6_req,
-		g_qdf_dp_trace_data.icmpv6_resp,
-		g_qdf_dp_trace_data.icmpv6_ns,
-		g_qdf_dp_trace_data.icmpv6_na,
-		g_qdf_dp_trace_data.icmpv6_rs,
-		g_qdf_dp_trace_data.icmpv6_ra);
+	qdf_dp_trace_dump_stats();
 
 	DPTRACE_PRINT("DPT: Total Records: %d, Head: %d, Tail: %d",
 		      g_qdf_dp_trace_data.num, g_qdf_dp_trace_data.head,

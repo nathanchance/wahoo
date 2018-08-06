@@ -1119,7 +1119,8 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
 	struct dwc3_gadget_ep_cmd_params params;
 	const struct usb_endpoint_descriptor *desc = ep->desc;
 	const struct usb_ss_ep_comp_descriptor *comp_desc = ep->comp_desc;
-	u32			reg;
+	u32 reg;
+	int ret;
 
 	memset(&params, 0x00, sizeof(params));
 
@@ -1168,6 +1169,10 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
 
 	/* Set XferRsc Index for GSI EP */
 	if (!(dep->flags & DWC3_EP_ENABLED)) {
+		ret = dwc3_gadget_resize_tx_fifos(dwc, dep);
+		if (ret)
+			return;
+
 		memset(&params, 0x00, sizeof(params));
 		params.param0 = DWC3_DEPXFERCFG_NUM_XFER_RES(1);
 		dwc3_send_gadget_ep_cmd(dwc, dep->number,
@@ -1988,8 +1993,10 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 
 	dbg_event(0xFF, "Ctl Sus", atomic_read(&dwc->in_lpm));
 
+	dev_info(mdwc->dev, "%s: Calling suspend %d\n", __func__, __LINE__);
+
 	if (atomic_read(&dwc->in_lpm)) {
-		dev_dbg(mdwc->dev, "%s: Already suspended\n", __func__);
+		dev_info(mdwc->dev, "%s: Already suspended\n", __func__);
 		return 0;
 	}
 
@@ -2001,7 +2008,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		for (i = 0; i < dwc->num_event_buffers; i++) {
 			struct dwc3_event_buffer *evt = dwc->ev_buffs[i];
 			if ((evt->flags & DWC3_EVENT_PENDING)) {
-				dev_dbg(mdwc->dev,
+				dev_info(mdwc->dev,
 				"%s: %d device events pending, abort suspend\n",
 				__func__, evt->count / 4);
 				dbg_print_reg("PENDING DEVICE EVENT",
@@ -2022,7 +2029,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		 * and OTG state machine will go for LPM later, after completing
 		 * transition to IDLE state.
 		*/
-		dev_dbg(mdwc->dev,
+		dev_info(mdwc->dev,
 			"%s: cable disconnected while not in idle otg state\n",
 			__func__);
 		return -EBUSY;
@@ -2035,9 +2042,9 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	 */
 	if ((dwc->is_drd && mdwc->otg_state == OTG_STATE_B_SUSPEND) &&
 		(dwc->gadget.state != USB_STATE_CONFIGURED)) {
-		pr_err("%s(): Trying to go in LPM with state:%d\n",
+		dev_err(mdwc->dev, "%s(): Trying to go in LPM with state:%d\n",
 					__func__, dwc->gadget.state);
-		pr_err("%s(): LPM is not performed.\n", __func__);
+		dev_err(mdwc->dev, "%s(): LPM is not performed.\n", __func__);
 		return -EBUSY;
 	}
 
@@ -2119,7 +2126,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	 * event is received.
 	 */
 	if (mdwc->lpm_to_suspend_delay) {
-		dev_dbg(mdwc->dev, "defer suspend with %d(msecs)\n",
+		dev_info(mdwc->dev, "defer suspend with %d(msecs)\n",
 					mdwc->lpm_to_suspend_delay);
 		pm_wakeup_event(mdwc->dev, mdwc->lpm_to_suspend_delay);
 	} else {
@@ -2153,10 +2160,10 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	long core_clk_rate;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
-	dev_dbg(mdwc->dev, "%s: exiting lpm\n", __func__);
+	dev_info(mdwc->dev, "%s: exiting lpm\n", __func__);
 
 	if (!atomic_read(&dwc->in_lpm)) {
-		dev_dbg(mdwc->dev, "%s: Already resumed\n", __func__);
+		dev_info(mdwc->dev, "%s: Already resumed\n", __func__);
 		return 0;
 	}
 

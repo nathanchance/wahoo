@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -41,6 +41,23 @@
 #define __SIRPARAMS_H
 
 #include "sir_types.h"
+
+#define WAKELOCK_DURATION_RECOMMENDED	1000
+#define WAKELOCK_DURATION_MAX		3000
+
+
+#define SYSTEM_TIME_MSEC_TO_USEC      1000
+#define SYSTEM_TIME_SEC_TO_MSEC       1000
+#define SYSTEM_TIME_NSEC_TO_USEC      1000
+
+/*
+ * Following time is used to program WOW_TIMER_PATTERN to FW so that FW will
+ * wake host up to do graceful disconnect in case PEER remains un-authorized
+ * for this long.
+ */
+#define SIR_INSTALL_KEY_TIMEOUT_SEC      70
+#define SIR_INSTALL_KEY_TIMEOUT_MS       \
+			(SIR_INSTALL_KEY_TIMEOUT_SEC * SYSTEM_TIME_SEC_TO_MSEC)
 
 /* defines for WPS config states */
 #define       SAP_WPS_DISABLED             0
@@ -609,8 +626,8 @@ typedef struct sSirMbMsgP2p {
 #define SIR_HAL_REMOVE_BCN_FILTER_CMDID     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 340)
 
 
-#define SIR_HAL_BPF_GET_CAPABILITIES_REQ    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 341)
-#define SIR_HAL_BPF_SET_INSTRUCTIONS_REQ    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 342)
+#define SIR_HAL_APF_GET_CAPABILITIES_REQ    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 341)
+#define SIR_HAL_APF_SET_INSTRUCTIONS_REQ    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 342)
 
 #define SIR_HAL_SET_WISA_PARAMS             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 343)
 #define SIR_HAL_SET_ADAPT_DWELLTIME_PARAMS  (SIR_HAL_ITC_MSG_TYPES_BEGIN + 344)
@@ -674,6 +691,14 @@ typedef struct sSirMbMsgP2p {
 
 #define SIR_HAL_GET_PEER_INFO               (SIR_HAL_ITC_MSG_TYPES_BEGIN + 386)
 #define SIR_HAL_GET_PEER_INFO_EXT           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 387)
+#define SIR_HAL_RX_CHN_STATUS_EVENT         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 388)
+
+#define SIR_HAL_SET_LIMIT_OFF_CHAN          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 388)
+
+#define SIR_HAL_SET_DEL_PMKID_CACHE         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 389)
+#define SIR_HAL_HLP_IE_INFO                 (SIR_HAL_ITC_MSG_TYPES_BEGIN + 390)
+#define SIR_HAL_INVOKE_NEIGHBOR_REPORT      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 391)
+#define SIR_HAL_NDP_SCH_UPDATE_IND          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 392)
 
 #define SIR_HAL_MSG_TYPES_END               (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
 /* CFG message types */

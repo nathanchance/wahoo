@@ -62,7 +62,6 @@ void hdd_debugfs_process_iface_stats(hdd_adapter_t *adapter,
 	}
 
 	iface_stat = data;
-
 	buffer = ll_stats.result;
 	buffer += ll_stats.len;
 	len = scnprintf(buffer, DEBUGFS_LLSTATS_BUF_SIZE - ll_stats.len,

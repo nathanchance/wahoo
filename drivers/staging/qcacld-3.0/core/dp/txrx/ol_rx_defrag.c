@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -61,7 +61,7 @@
 #include <ol_ctrl_txrx_api.h>
 #include <ol_txrx_peer_find.h>
 #include <qdf_nbuf.h>
-#include <ieee80211.h>
+#include <linux/ieee80211.h>
 #include <qdf_util.h>
 #include <athdefs.h>
 #include <qdf_mem.h>
@@ -332,6 +332,7 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 	void *rx_mpdu_desc;
 	uint8_t pktlog_bit;
 	uint32_t msdu_count = 0;
+	int ret;
 
 	if (tid >= OL_TXRX_NUM_EXT_TIDS) {
 		ol_txrx_err("%s:  invalid tid, %u\n", __FUNCTION__, tid);
@@ -355,9 +356,14 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 	}
 	pktlog_bit =
 		(htt_rx_amsdu_rx_in_order_get_pktlog(rx_frag_ind_msg) == 0x01);
+	ret = htt_rx_frag_pop(htt_pdev, rx_frag_ind_msg, &head_msdu,
+			      &tail_msdu, &msdu_count);
+	/* Return if msdu pop fails from rx hash table, as recovery
+	 * is triggered and we exit gracefully.
+	 */
+	if (!ret)
+		return;
 	if (peer) {
-		htt_rx_frag_pop(htt_pdev, rx_frag_ind_msg, &head_msdu,
-				&tail_msdu, &msdu_count);
 		qdf_assert(head_msdu == tail_msdu);
 		if (ol_cfg_is_full_reorder_offload(pdev->ctrl_pdev)) {
 			rx_mpdu_desc =
@@ -374,8 +380,6 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 		ol_rx_reorder_store_frag(pdev, peer, tid, seq_num, head_msdu);
 	} else {
 		/* invalid frame - discard it */
-		htt_rx_frag_pop(htt_pdev, rx_frag_ind_msg, &head_msdu,
-				&tail_msdu, &msdu_count);
 		if (ol_cfg_is_full_reorder_offload(pdev->ctrl_pdev))
 			htt_rx_msdu_desc_retrieve(htt_pdev, head_msdu);
 		else
@@ -627,6 +631,11 @@ void ol_rx_defrag_waitlist_flush(struct ol_txrx_pdev_t *pdev)
 			break;
 
 		tid = rx_reorder->tid;
+		if (tid >= OL_TXRX_NUM_EXT_TIDS) {
+			ol_txrx_err("%s:  invalid tid, %u\n", __FUNCTION__, tid);
+			WARN_ON(1);
+			continue;
+		}
 		/* get index 0 of the rx_reorder array */
 		rx_reorder_base = rx_reorder - tid;
 		peer =

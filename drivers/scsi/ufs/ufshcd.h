@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -431,7 +431,7 @@ struct ufs_clk_gating {
 	struct device_attribute enable_attr;
 	bool is_enabled;
 	int active_reqs;
-	struct workqueue_struct *ungating_workq;
+	struct workqueue_struct *clk_gating_workq;
 };
 
 /* Hibern8 state  */
@@ -519,7 +519,7 @@ struct ufs_init_prefetch {
 	u32 icc_level;
 };
 
-#define UIC_ERR_REG_HIST_LENGTH 8
+#define UIC_ERR_REG_HIST_LENGTH 20
 /**
  * struct ufs_uic_err_reg_hist - keeps history of uic errors
  * @pos: index to indicate cyclic buffer position
@@ -547,6 +547,7 @@ struct debugfs_files {
 	struct dentry *dbg_print_en;
 	struct dentry *req_stats;
 	struct dentry *query_stats;
+	struct dentry *io_stats;
 	u32 dme_local_attr_id;
 	u32 dme_peer_attr_id;
 	struct dentry *reset_controller;
@@ -570,7 +571,8 @@ enum ts_types {
 	TS_URGENT_READ		= 3,
 	TS_URGENT_WRITE		= 4,
 	TS_FLUSH		= 5,
-	TS_NUM_STATS		= 6,
+	TS_DISCARD		= 6,
+	TS_NUM_STATS		= 7,
 };
 
 /**
@@ -585,6 +587,24 @@ struct ufshcd_req_stat {
 	u64 max;
 	u64 sum;
 	u64 count;
+};
+
+/**
+ * struct ufshcd_io_stat - statistics for I/O amount.
+ * @req_count_started: total number of I/O requests, which were started.
+ * @total_bytes_started: total I/O amount in bytes, which were started.
+ * @req_count_completed: total number of I/O request, which were completed.
+ * @total_bytes_completed: total I/O amount in bytes, which were completed.
+ * @max_diff_req_count: MAX of 'req_count_started - req_count_completed'.
+ * @max_diff_total_bytes: MAX of 'total_bytes_started - total_bytes_completed'.
+ */
+struct ufshcd_io_stat {
+	u64 req_count_started;
+	u64 total_bytes_started;
+	u64 req_count_completed;
+	u64 total_bytes_completed;
+	u64 max_diff_req_count;
+	u64 max_diff_total_bytes;
 };
 #endif
 
@@ -614,6 +634,9 @@ struct ufs_stats {
 	int err_stats[UFS_ERR_MAX];
 	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
 	int query_stats_arr[UPIU_QUERY_OPCODE_MAX][MAX_QUERY_IDN];
+	struct ufshcd_io_stat io_read;
+	struct ufshcd_io_stat io_write;
+	struct ufshcd_io_stat io_readwrite;
 
 #endif
 	u32 hibern8_exit_cnt;
@@ -640,6 +663,27 @@ struct ufs_stats {
 		 UFSHCD_DBG_PRINT_HOST_REGS_EN | UFSHCD_DBG_PRINT_TRS_EN | \
 		 UFSHCD_DBG_PRINT_TMRS_EN | UFSHCD_DBG_PRINT_PWR_EN |	   \
 		 UFSHCD_DBG_PRINT_HOST_STATE_EN)
+
+struct ufshcd_cmd_log_entry {
+	char *str;	/* context like "send", "complete" */
+	char *cmd_type;	/* "scsi", "query", "nop", "dme" */
+	u8 lun;
+	u8 cmd_id;
+	sector_t lba;
+	int transfer_len;
+	u8 idn;		/* used only for query idn */
+	u32 doorbell;
+	u32 outstanding_reqs;
+	u32 seq_num;
+	unsigned int tag;
+	ktime_t tstamp;
+};
+
+struct ufshcd_cmd_log {
+	struct ufshcd_cmd_log_entry *entries;
+	int pos;
+	u32 seq_num;
+};
 
 /**
  * struct ufs_hba - per adapter private structure
@@ -813,7 +857,6 @@ struct ufs_hba {
 	/* Work Queues */
 	struct work_struct eh_work;
 	struct work_struct eeh_work;
-	struct work_struct rls_work;
 
 	/* HBA Errors */
 	u32 errors;
@@ -846,6 +889,8 @@ struct ufs_hba {
 	/* Number of requests aborts */
 	int req_abort_count;
 
+	u32 security_in;
+
 	/* Number of lanes available (1 or 2) for Rx/Tx */
 	u32 lanes_per_direction;
 
@@ -857,6 +902,7 @@ struct ufs_hba {
 
 	struct ufs_clk_gating clk_gating;
 	struct ufs_hibern8_on_idle hibern8_on_idle;
+	struct ufshcd_cmd_log cmd_log;
 
 	/* Control to enable/disable host capabilities */
 	u32 caps;
@@ -910,9 +956,13 @@ struct ufs_hba {
 	bool full_init_linereset;
 	struct pinctrl *pctrl;
 
-	int			latency_hist_enabled;
-	struct io_latency_state io_lat_s;
-	bool restore_needed;
+	int latency_hist_enabled;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
+
+	/* To monitor slow UFS I/O requests. */
+	u64 slowio_us;
+	u64 slowio_cnt;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1382,5 +1432,8 @@ static inline void ufshcd_vops_pm_qos_req_end(struct ufs_hba *hba,
 	if (hba->var && hba->var->pm_qos_vops && hba->var->pm_qos_vops->req_end)
 		hba->var->pm_qos_vops->req_end(hba, req, lock);
 }
+
+#define UFSHCD_MIN_SLOWIO_US		(1000)     /* 1 ms */
+#define UFSHCD_DEFAULT_SLOWIO_US	(10000000) /* 10 seconds */
 
 #endif /* End of Header */

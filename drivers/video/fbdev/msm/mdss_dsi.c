@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -759,6 +759,7 @@ struct mdss_dsi_debugfs_info {
 	struct dentry *root;
 	struct mdss_dsi_ctrl_pdata ctrl_pdata;
 	struct buf_data on_cmd;
+	struct buf_data post_on_cmd;
 	struct buf_data off_cmd;
 	struct buf_data alpm_cmd[ALPM_MODE_MAX];
 	u32 override_flag;
@@ -789,7 +790,7 @@ static ssize_t mdss_dsi_cmd_state_read(struct file *file, char __user *buf,
 	if (blen < 0)
 		return 0;
 
-	if (copy_to_user(buf, buffer, blen))
+	if (copy_to_user(buf, buffer, min(count, (size_t)blen+1)))
 		return -EFAULT;
 
 	*ppos += blen;
@@ -1082,9 +1083,14 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 		&dfs_ctrl->on_cmds.link_state, &mdss_dsi_cmd_state_fop);
 	debugfs_create_file("dsi_off_cmd_state", 0644, dfs->root,
 		&dfs_ctrl->off_cmds.link_state, &mdss_dsi_cmd_state_fop);
+	debugfs_create_file("dsi_post_on_cmd_state", 0644, dfs->root,
+			    &dfs_ctrl->post_panel_on_cmds.link_state,
+			    &mdss_dsi_cmd_state_fop);
 
 	DEBUGFS_CREATE_DCS_CMD("dsi_on_cmd", dfs->root, &dfs->on_cmd,
 				ctrl_pdata->on_cmds);
+	DEBUGFS_CREATE_DCS_CMD("dsi_post_on_cmd", dfs->root, &dfs->post_on_cmd,
+				ctrl_pdata->post_panel_on_cmds);
 	DEBUGFS_CREATE_DCS_CMD("dsi_off_cmd", dfs->root, &dfs->off_cmd,
 				ctrl_pdata->off_cmds);
 
@@ -1246,6 +1252,8 @@ static void mdss_dsi_debugfsinfo_to_dsictrl_info(
 			dfs->ctrl_pdata.cmd_sync_wait_trigger;
 
 	_mdss_dsi_refresh_cmd(&dfs->on_cmd, &ctrl_pdata->on_cmds);
+	_mdss_dsi_refresh_cmd(&dfs->post_on_cmd,
+			      &ctrl_pdata->post_panel_on_cmds);
 	_mdss_dsi_refresh_cmd(&dfs->off_cmd, &ctrl_pdata->off_cmds);
 	for (i = 0; i < ALPM_MODE_MAX; i++)
 		_mdss_dsi_refresh_cmd(&dfs->alpm_cmd[i],
@@ -3526,6 +3534,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 			pr_err("Failed to request disp ERR_DETECT irq : %d\n", rc);
 			goto error_shadow_clk_deinit;
 		}
+		disable_irq(gpio_to_irq(ctrl_pdata->disp_err_detect_gpio));
 		pr_info("request disp ERR_DETECT irq\n");
 	}
 

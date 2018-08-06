@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -238,7 +238,7 @@ static int __wlan_hdd_ipv6_changed(struct notifier_block *nb,
 	ENTER_DEV(ndev);
 
 	if ((pAdapter == NULL) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
-		hdd_err("Adapter context is invalid %p", pAdapter);
+		hdd_err("Adapter context is invalid %pK", pAdapter);
 		return NOTIFY_DONE;
 	}
 
@@ -661,13 +661,8 @@ void hdd_conf_hostoffload(hdd_adapter_t *pAdapter, bool fenable)
 	}
 
 	/* Configure DTIM hardware filter rules */
-	{
-		enum hw_filter_mode mode = pHddCtx->config->hw_filter_mode;
-
-		if (!fenable)
-			mode = HW_FILTER_DISABLED;
-		hdd_conf_hw_filter_mode(pAdapter, mode);
-	}
+	hdd_conf_hw_filter_mode(pAdapter, pHddCtx->config->hw_filter_mode,
+				fenable);
 
 	EXIT();
 }
@@ -810,7 +805,8 @@ static int hdd_set_grat_arp_keepalive(hdd_adapter_t *adapter)
  * This function performs the work initially trigged by a callback
  * from the IPv4 netdev notifier.  Since this means there has been a
  * change in IPv4 state for the interface, the ARP offload is
- * reconfigured.
+ * reconfigured. Also, Updates the HLP IE info with IP address info
+ * to fw if LFR3 is enabled
  *
  * Return: None
  */
@@ -823,6 +819,9 @@ static void __hdd_ipv4_notifier_work_queue(struct work_struct *work)
 	int status;
 	bool ndi_connected;
 	bool sta_associated;
+	hdd_wext_state_t *wext_state;
+	tCsrRoamProfile *roam_profile;
+	struct in_ifaddr *ifa;
 
 	hdd_debug("Configuring ARP Offload");
 
@@ -855,6 +854,19 @@ static void __hdd_ipv4_notifier_work_queue(struct work_struct *work)
 
 	if (pHddCtx->config->sta_keepalive_method == HDD_STA_KEEPALIVE_GRAT_ARP)
 		hdd_set_grat_arp_keepalive(pAdapter);
+
+	wext_state = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+	roam_profile = &wext_state->roamProfile;
+	ifa = hdd_lookup_ifaddr(pAdapter);
+
+	hdd_debug("FILS Roaming support: %d",
+		  pHddCtx->config->is_fils_roaming_supported);
+
+	if (ifa && pHddCtx->config->is_fils_roaming_supported)
+		sme_send_hlp_ie_info(pHddCtx->hHal,
+				pAdapter->sessionId,
+				roam_profile,
+				ifa->ifa_local);
 }
 
 /**
@@ -896,7 +908,7 @@ static int __wlan_hdd_ipv4_changed(struct notifier_block *nb,
 	ENTER_DEV(ndev);
 
 	if ((pAdapter == NULL) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
-		hdd_err("Adapter context is invalid %p", pAdapter);
+		hdd_err("Adapter context is invalid %pK", pAdapter);
 		return NOTIFY_DONE;
 	}
 
@@ -1040,7 +1052,8 @@ QDF_STATUS hdd_conf_arp_offload(hdd_adapter_t *pAdapter, bool fenable)
 	return QDF_STATUS_SUCCESS;
 }
 
-int hdd_conf_hw_filter_mode(hdd_adapter_t *adapter, enum hw_filter_mode mode)
+int hdd_conf_hw_filter_mode(hdd_adapter_t *adapter, enum hw_filter_mode mode,
+			    bool filter_enable)
 {
 	QDF_STATUS status;
 
@@ -1050,7 +1063,8 @@ int hdd_conf_hw_filter_mode(hdd_adapter_t *adapter, enum hw_filter_mode mode)
 	}
 
 	status = sme_conf_hw_filter_mode(WLAN_HDD_GET_HAL_CTX(adapter),
-					 adapter->sessionId, mode);
+					 adapter->sessionId, mode,
+					 filter_enable);
 
 	return qdf_status_to_os_return(status);
 }
@@ -1416,7 +1430,6 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	v_CONTEXT_t p_cds_context = NULL;
 	hdd_context_t *pHddCtx;
 	p_cds_sched_context cds_sched_context = NULL;
-	QDF_STATUS qdf_status;
 
 	hdd_info("WLAN driver shutting down!");
 
@@ -1439,7 +1452,20 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	hdd_debug("Invoking packetdump deregistration API");
 	wlan_deregister_txrx_packetdump();
 
-	hdd_cleanup_scan_queue(pHddCtx);
+	/*
+	 * After SSR, FW clear its txrx stats. In host,
+	 * as adapter is intact so those counts are still
+	 * available. Now if agains Set stats command comes,
+	 * then host will increment its counts start from its
+	 * last saved value, i.e., count before SSR, and FW will
+	 * increment its count from 0. This will finally sends a
+	 * mismatch of packet counts b/w host and FW to framework
+	 * that will create ambiquity. Therfore, Resetting the host
+	 * counts here so that after SSR both FW and host start
+	 * increment their counts from 0.
+	 */
+	hdd_reset_all_adapters_connectivity_stats(pHddCtx);
+
 	hdd_reset_all_adapters(pHddCtx);
 
 	/* Flush cached rx frame queue */
@@ -1463,11 +1489,6 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	}
 #endif
 
-	qdf_status = cds_sched_close(p_cds_context);
-	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-		hdd_err("Failed to close CDS Scheduler");
-		QDF_ASSERT(false);
-	}
 	hdd_ipa_uc_ssr_deinit();
 
 	qdf_mc_timer_stop(&pHddCtx->tdls_source_timer);
@@ -1506,6 +1527,38 @@ static inline void hdd_wlan_ssr_reinit_event(void)
 #endif
 
 /**
+ * hdd_send_default_scan_ies - send default scan ies to fw
+ *
+ * This function is used to send default scan ies to fw
+ * in case of wlan re-init
+ *
+ * Return: void
+ */
+static void hdd_send_default_scan_ies(hdd_context_t *hdd_ctx)
+{
+	hdd_adapter_list_node_t *adapter_node, *next;
+	hdd_adapter_t *adapter;
+	QDF_STATUS status;
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (NULL != adapter_node && QDF_STATUS_SUCCESS == status) {
+		adapter = adapter_node->pAdapter;
+		if (hdd_is_interface_up(adapter) &&
+		    (adapter->device_mode == QDF_STA_MODE ||
+		    adapter->device_mode == QDF_P2P_DEVICE_MODE) &&
+		    adapter->scan_info.default_scan_ies) {
+			sme_set_default_scan_ie(hdd_ctx->hHal,
+				      adapter->sessionId,
+				      adapter->scan_info.default_scan_ies,
+				      adapter->scan_info.default_scan_ies_len);
+		}
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node,
+					      &next);
+		adapter_node = next;
+	}
+}
+
+/**
  * hdd_wlan_re_init() - HDD SSR re-init function
  *
  * This function is called by the HIF to re-initialize the driver after SSR.
@@ -1539,19 +1592,9 @@ QDF_STATUS hdd_wlan_re_init(void)
 	}
 	bug_on_reinit_failure = pHddCtx->config->bug_on_reinit_failure;
 
-	/* The driver should always be initialized in STA mode after SSR */
-	hdd_set_conparam(0);
-	/* Try to get an adapter from mode ID */
-	pAdapter = hdd_get_adapter(pHddCtx, QDF_STA_MODE);
-	if (!pAdapter) {
-		pAdapter = hdd_get_adapter(pHddCtx, QDF_SAP_MODE);
-		if (!pAdapter) {
-			pAdapter = hdd_get_adapter(pHddCtx, QDF_IBSS_MODE);
-			if (!pAdapter)
-				hdd_err("Failed to get Adapter!");
-
-		}
-	}
+	pAdapter = hdd_get_first_valid_adapter();
+	if (!pAdapter)
+		hdd_err("Failed to get adapter");
 
 	if (pHddCtx->config->enable_dp_trace)
 		hdd_dp_trace_init(pHddCtx->config);
@@ -1585,21 +1628,13 @@ QDF_STATUS hdd_wlan_re_init(void)
 	/* Allow the phone to go to sleep */
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_REINIT);
 
-	ret = hdd_register_cb(pHddCtx);
-	if (ret) {
-		hdd_err("Failed to register HDD callbacks!");
-		goto err_cds_disable;
-	}
-
 	/* set chip power save failure detected callback */
 	sme_set_chip_pwr_save_fail_cb(pHddCtx->hHal,
 				      hdd_chip_pwr_save_fail_detected_cb);
 
+	hdd_send_default_scan_ies(pHddCtx);
 	hdd_info("WLAN host driver reinitiation completed!");
 	goto success;
-
-err_cds_disable:
-	hdd_wlan_stop_modules(pHddCtx, false);
 
 err_re_init:
 	/* Allow the phone to go to sleep */
@@ -1642,8 +1677,6 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 	if (allow_power_save &&
 	    adapter->device_mode == QDF_STA_MODE &&
 	    !adapter->sessionCtx.station.ap_supports_immediate_power_save) {
-		/* override user's requested flag */
-		allow_power_save = false;
 		timeout = AUTO_PS_DEFER_TIMEOUT_MS;
 		hdd_debug("Defer power-save due to AP spec non-conformance");
 	}
@@ -1664,8 +1697,13 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 			 * Enter Power Save command received from GUI
 			 * this means DHCP is completed
 			 */
-			sme_ps_enable_disable(hal, adapter->sessionId,
-					SME_PS_ENABLE);
+			if (timeout)
+				sme_ps_enable_auto_ps_timer(hal,
+							    adapter->sessionId,
+							    timeout);
+			else
+				sme_ps_enable_disable(hal, adapter->sessionId,
+						      SME_PS_ENABLE);
 		} else {
 			hdd_debug("Power Save is not enabled in the cfg");
 		}
@@ -1679,8 +1717,6 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 		sme_ps_disable_auto_ps_timer(WLAN_HDD_GET_HAL_CTX(adapter),
 			adapter->sessionId);
 		sme_ps_enable_disable(hal, adapter->sessionId, SME_PS_DISABLE);
-		sme_ps_enable_auto_ps_timer(WLAN_HDD_GET_HAL_CTX(adapter),
-			adapter->sessionId, timeout);
 	}
 
 	return 0;
@@ -1705,6 +1741,20 @@ void wlan_hdd_inc_suspend_stats(hdd_context_t *hdd_ctx,
 	hdd_ctx->suspend_resume_stats.suspend_fail[reason]++;
 	wlan_hdd_print_suspend_fail_stats(hdd_ctx);
 }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
+static inline void
+hdd_sched_scan_results(struct wiphy *wiphy, uint64_t reqid)
+{
+	cfg80211_sched_scan_results(wiphy);
+}
+#else
+static inline void
+hdd_sched_scan_results(struct wiphy *wiphy, uint64_t reqid)
+{
+	cfg80211_sched_scan_results(wiphy, reqid);
+}
+#endif
 
 /**
  * __wlan_hdd_cfg80211_resume_wlan() - cfg80211 resume callback
@@ -1802,7 +1852,7 @@ static int __wlan_hdd_cfg80211_resume_wlan(struct wiphy *wiphy)
 				hdd_prevent_suspend_timeout(
 					HDD_WAKELOCK_TIMEOUT_RESUME,
 					WIFI_POWER_EVENT_WAKELOCK_RESUME_WLAN);
-				cfg80211_sched_scan_results(pHddCtx->wiphy);
+				hdd_sched_scan_results(pHddCtx->wiphy, 0);
 			}
 
 			hdd_debug("cfg80211 scan result database updated");
@@ -2102,7 +2152,7 @@ static void hdd_stop_dhcp_ind(hdd_adapter_t *adapter)
 			  adapter->macAddressCurrent.bytes,
 			  adapter->sessionId);
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DHCP);
-	qdf_runtime_pm_allow_suspend(&adapter->connect_rpm_ctx.connect);
+	qdf_runtime_pm_allow_suspend(&hdd_ctx->runtime_context.connect);
 }
 
 /**
@@ -2119,7 +2169,7 @@ static void hdd_start_dhcp_ind(hdd_adapter_t *adapter)
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 
 	hdd_debug("DHCP start indicated through power save");
-	qdf_runtime_pm_prevent_suspend(&adapter->connect_rpm_ctx.connect);
+	qdf_runtime_pm_prevent_suspend(&hdd_ctx->runtime_context.connect);
 	hdd_prevent_suspend_timeout(HDD_WAKELOCK_TIMEOUT_CONNECT,
 				    WIFI_POWER_EVENT_WAKELOCK_DHCP);
 	sme_dhcp_start_ind(hdd_ctx->hHal, adapter->device_mode,
@@ -2149,9 +2199,9 @@ static int __wlan_hdd_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 	ENTER();
 
 	if (timeout < 0) {
-		hdd_debug("User space timeout: %d; Using default instead: %d",
-			timeout, AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE);
-		timeout = AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE;
+		hdd_debug("User space timeout: %d; Enter full power or power save",
+			  timeout);
+		timeout = 0;
 	}
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {

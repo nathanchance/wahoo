@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -116,7 +116,7 @@ QDF_STATUS htc_connect_service(HTC_HANDLE HTCHandle,
 	uint8_t rsp_msg_status, rsp_msg_end_id, rsp_msg_serv_meta_len;
 
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC,
-			("+htc_connect_service, target:%p SvcID:0x%X\n", target,
+			("+htc_connect_service, target:%pK SvcID:0x%X\n", target,
 			 pConnectReq->service_id));
 
 	do {
@@ -383,14 +383,14 @@ QDF_STATUS htc_connect_service(HTC_HANDLE HTCHandle,
 		}
 
 		AR_DEBUG_PRINTF(ATH_DEBUG_INFO,
-				("HTC Service:0x%4.4X, ULpipe:%d DLpipe:%d id:%d Ready\n",
+				("SVC:0x%4.4X, ULpipe:%d DLpipe:%d id:%d Ready",
 				 pEndpoint->service_id, pEndpoint->UL_PipeID,
 				 pEndpoint->DL_PipeID, pEndpoint->Id));
 
 		if (disableCreditFlowCtrl && pEndpoint->TxCreditFlowEnabled) {
 			pEndpoint->TxCreditFlowEnabled = false;
 			AR_DEBUG_PRINTF(ATH_DEBUG_INFO,
-					("HTC Service:0x%4.4X ep:%d TX flow control disabled\n",
+					("SVC:0x%4.4X ep:%d TX flow control disabled",
 					 pEndpoint->service_id,
 					 assignedEndpoint));
 		}

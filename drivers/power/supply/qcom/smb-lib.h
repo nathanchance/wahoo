@@ -133,6 +133,11 @@ enum smb_irq_index {
 	SMB_IRQ_MAX,
 };
 
+enum {
+	INTERNAL_OTG_BIT = BIT(0),
+	EXTERNAL_OTG_BIT = BIT(1),
+};
+
 struct smb_irq_info {
 	const char			*name;
 	const irq_handler_t		handler;
@@ -531,6 +536,8 @@ int smblib_get_pe_start(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_get_prop_vbus_output_status(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_charger_temp(struct smb_charger *chg,
@@ -585,6 +592,10 @@ int smblib_get_prop_pr_swap_in_progress(struct smb_charger *chg,
 int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 				const union power_supply_propval *val);
 
+#ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+int smblib_get_cycle_count(struct smb_charger *chg,
+			   union power_supply_propval *val);
+#endif
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
 #endif /* __SMB2_CHARGER_H */

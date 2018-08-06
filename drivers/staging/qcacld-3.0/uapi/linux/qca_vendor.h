@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -233,6 +233,19 @@
  *      information indicating the reason that triggered this detection. The
  *      attributes for this command are defined in
  *      enum qca_wlan_vendor_attr_hang.
+ * @QCA_NL80211_VENDOR_SUBCMD_GET_SAR_LIMITS: Get the Specific Absorption Rate
+ *	(SAR) power limits. This is a companion to the command
+ *	@QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS and is used to retrieve the
+ *	settings currently in use. The attributes returned by this command are
+ *	defined by enum qca_vendor_attr_sar_limits.
+ * @QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO: Provides the current behaviour of
+ *      the WLAN hardware MAC's associated with each WLAN netdev interface.
+ *      This works both as a query (user space asks the current mode) or event
+ *      interface (driver advertizing the current mode to the user space).
+ *      Driver does not trigger this event for temporary hardware mode changes.
+ *      Mode changes w.r.t Wi-Fi connection updation ( VIZ creation / deletion,
+ *      channel change etc ) are updated with this event. Attributes for this
+ *      interface are defined in enum qca_wlan_vendor_attr_mac.
  */
 
 enum qca_nl80211_vendor_subcmds {
@@ -430,6 +443,8 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_SPECTRAL_SCAN_STOP = 155,
 	QCA_NL80211_VENDOR_SUBCMD_ACTIVE_TOS = 156,
 	QCA_NL80211_VENDOR_SUBCMD_HANG = 157,
+	QCA_NL80211_VENDOR_SUBCMD_GET_SAR_LIMITS = 164,
+	QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO = 165,
 };
 
 /**
@@ -698,6 +713,7 @@ enum qca_wlan_vendor_attr_get_station_info {
  * @QCA_NL80211_VENDOR_SUBCMD_SAP_CONDITIONAL_CHAN_SWITCH_INDEX: SAP
  *      conditional channel switch index
  * @QCA_NL80211_VENDOR_SUBCMD_HANG_REASON_INDEX: hang event reason index
+ * @QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO_INDEX: MAC mode info index
  */
 
 enum qca_nl80211_vendor_subcmds_index {
@@ -777,6 +793,8 @@ enum qca_nl80211_vendor_subcmds_index {
 	QCA_NL80211_VENDOR_SUBCMD_NUD_STATS_GET_INDEX,
 	QCA_NL80211_VENDOR_SUBCMD_PWR_SAVE_FAIL_DETECTED_INDEX,
 	QCA_NL80211_VENDOR_SUBCMD_HANG_REASON_INDEX,
+	QCA_NL80211_VENDOR_SUBCMD_LINK_PROPERTIES_INDEX,
+	QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO_INDEX,
 };
 
 /**
@@ -2532,11 +2550,117 @@ enum qca_attr_nud_stats_set {
 	QCA_ATTR_NUD_STATS_SET_START = 1,
 	/* IPv4 address of the default gateway (in network byte order) */
 	QCA_ATTR_NUD_STATS_GW_IPV4 = 2,
-
+	/*
+	 * Represents the data packet type to be monitored.
+	 * Host driver tracks the stats corresponding to each data frame
+	 * represented by these flags.
+	 * These data packets are represented by
+	 * enum qca_wlan_vendor_nud_stats_set_data_pkt_info.
+	 */
+	QCA_ATTR_NUD_STATS_SET_DATA_PKT_INFO = 3,
 	/* keep last */
 	QCA_ATTR_NUD_STATS_SET_LAST,
 	QCA_ATTR_NUD_STATS_SET_MAX =
 		QCA_ATTR_NUD_STATS_SET_LAST - 1,
+};
+
+/**
+ * enum qca_attr_connectivity_check_stats_set - attribute to vendor subcmd
+ *	QCA_NL80211_VENDOR_SUBCMD_NUD_STATS_SET. This carry the requisite
+ *	information to start / stop the NUD stats collection.
+ * @QCA_ATTR_CONNECTIVITY_CHECK_STATS_STATS_PKT_INFO_TYPE: set pkt info stats
+ *	Bitmap to Flag to Start / Stop the NUD stats collection
+ *	Start - If included , Stop - If not included
+ * @QCA_ATTR_CONNECTIVITY_CHECK_STATS_DNS_DOMAIN_NAME: set gatway ipv4 address
+ *	IPv4 address of Default Gateway (in network byte order)
+ *	QCA_NL80211_VENDOR_SUBCMD_NUD_STATS_SET. This carry the requisite
+ *	information to start / stop the NUD stats collection.
+ * @QCA_ATTR_CONNECTIVITY_CHECK_STATS_SRC_PORT: set nud debug stats
+ *	Flag to Start / Stop the NUD stats collection
+ *	Start - If included , Stop - If not included
+ * @QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_PORT: set gatway ipv4 address
+ *	IPv4 address of Default Gateway (in network byte order)
+ *	QCA_NL80211_VENDOR_SUBCMD_NUD_STATS_SET. This carry the requisite
+ *	information to start / stop the NUD stats collection.
+ * @QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_IPV4: set nud debug stats
+ *	Flag to Start / Stop the NUD stats collection
+ *	Start - If included , Stop - If not included
+ * @QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_IPV6: set gatway ipv4 address
+ *	IPv4 address of Default Gateway (in network byte order)
+ */
+enum qca_attr_connectivity_check_stats_set {
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SET_INVALID = 0,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_STATS_PKT_INFO_TYPE = 1,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DNS_DOMAIN_NAME = 2,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SRC_PORT = 3,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_PORT = 4,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_IPV4 = 5,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_IPV6 = 6,
+	/* keep last */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SET_LAST,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SET_MAX =
+		QCA_ATTR_CONNECTIVITY_CHECK_STATS_SET_LAST - 1,
+};
+
+/**
+ * qca_wlan_vendor_nud_stats_data_pkt_flags: Flag representing the various
+ * data types for which the stats have to get collected.
+ */
+enum qca_wlan_vendor_connectivity_check_pkt_flags {
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_ARP = 1 << 0,
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_DNS = 1 << 1,
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_TCP_HANDSHAKE = 1 << 2,
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_ICMPV4 = 1 << 3,
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_ICMPV6 = 1 << 4,
+	/* Used by QCA_ATTR_NUD_STATS_PKT_TYPE only in nud stats get
+	 * to represent the stats of respective data type.
+	 */
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_TCP_SYN = 1 << 5,
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_TCP_SYN_ACK = 1 << 6,
+	QCA_WLAN_VENDOR_CONNECTIVITY_CHECK_SET_TCP_ACK = 1 << 7,
+};
+
+enum qca_attr_connectivity_check_stats {
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_INVALID = 0,
+	/* Data packet type for which the stats are collected.
+	 * Represented by enum qca_wlan_vendor_nud_stats_data_pkt_flags
+	 */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_TYPE = 1,
+	/* ID corresponding to the DNS frame for which the respective DNS stats
+	 * are monitored (u32).
+	 */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DNS_DOMAIN_NAME = 2,
+	/* source / destination port on which the respective proto stats are
+	 * collected (u32).
+	 */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_SRC_PORT = 3,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DEST_PORT = 4,
+	/* IPv4/IPv6 address for which the destined data packets are
+	 * monitored. (in network byte order)
+	 */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DEST_IPV4 = 5,
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DEST_IPV6 = 6,
+	/* Data packet Request count received from netdev */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV = 7,
+	/* Data packet Request count sent to lower MAC from upper MAC */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC = 8,
+	/* Data packet Request count received by lower MAC from upper MAC */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC = 9,
+	/* Data packet Request count successfully transmitted by the device */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS = 10,
+	/* Data packet Response count received by lower MAC */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_RX_COUNT_BY_LOWER_MAC = 11,
+	/* Data packet Response count received by upper MAC */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_RX_COUNT_BY_UPPER_MAC = 12,
+	/* Data packet Response count delivered to netdev */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_COUNT_TO_NETDEV = 13,
+	/* Data Packet Response count that are dropped out of order */
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_COUNT_OUT_OF_ORDER_DROP = 14,
+
+	/* keep last */
+	QCA_ATTR_CONNECTIVITY_CHECK_DATA_STATS_LAST,
+	QCA_ATTR_CONNECTIVITY_CHECK_DATA_STATS_MAX =
+		QCA_ATTR_CONNECTIVITY_CHECK_DATA_STATS_LAST - 1,
 };
 
 /**
@@ -2572,6 +2696,12 @@ enum qca_attr_nud_stats_get {
 	 * Yes - If detected, No - If not detected.
 	 */
 	QCA_ATTR_NUD_STATS_IS_DAD = 10,
+	/*
+	 * List of Data types for which the stats are requested.
+	 * This list does not carry ARP stats as they are done by the
+	 * above attributes. Represented by enum qca_attr_nud_data_stats.
+	 */
+	QCA_ATTR_NUD_STATS_DATA_PKT_STATS = 11,
 
 	/* keep last */
 	QCA_ATTR_NUD_STATS_GET_LAST,
@@ -2741,6 +2871,8 @@ enum qca_wlan_vendor_attr_link_properties {
 	QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_NSS = 1,
 	QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_RATE_FLAGS = 2,
 	QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_FREQ = 3,
+	QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_STA_FLAGS  = 4,
+	QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_STA_MAC  = 5,
 
 	/* KEEP LAST */
 	QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_AFTER_LAST,
@@ -2836,6 +2968,8 @@ enum qca_wlan_vendor_attr_sap_conditional_chan_switch {
  * @WIFI_LOGGER_POWER_EVENT_SUPPORTED - Power of driver
  * @WIFI_LOGGER_WAKE_LOCK_SUPPORTED - Wakelock of driver
  * @WIFI_LOGGER_WATCHDOG_TIMER_SUPPORTED - monitor FW health
+ * @WIFI_LOGGER_DRIVER_DUMP_SUPPORTED - dump driver state
+ * @WIFI_LOGGER_PACKET_FATE_SUPPORTED - tracks connection packets fate
  */
 enum wifi_logger_supported_features {
 	WIFI_LOGGER_PER_PACKET_TX_RX_STATUS_SUPPORTED = (1 << (1)),
@@ -2844,6 +2978,8 @@ enum wifi_logger_supported_features {
 	WIFI_LOGGER_WAKE_LOCK_SUPPORTED = (1 << (4)),
 	WIFI_LOGGER_VERBOSE_SUPPORTED = (1 << (5)),
 	WIFI_LOGGER_WATCHDOG_TIMER_SUPPORTED = (1 << (6)),
+	WIFI_LOGGER_DRIVER_DUMP_SUPPORTED = (1 << (7)),
+	WIFI_LOGGER_PACKET_FATE_SUPPORTED = (1 << (8))
 };
 /**
  * enum qca_wlan_vendor_attr_acs_offload
@@ -3192,6 +3328,25 @@ enum qca_wlan_vendor_attr_config {
 	 * enable/disable all fils features.
 	 * 0-enable, 1-disable */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_DISABLE_FILS = 54,
+
+	/* 16-bit unsigned value to configure the level of WLAN latency
+	 * module. See enum qca_wlan_vendor_attr_config_latency_level.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL = 55,
+
+	/*
+	 * 8-bit unsigned value indicating the driver to use the RSNE as-is from
+	 * the connect interface. Exclusively used for the scenarios where the
+	 * device is used as a test bed device with special functionality and
+	 * not recommended for production. This helps driver to not validate the
+	 * RSNE passed from user space and thus allow arbitrary IE data to be
+	 * used for testing purposes.
+	 * 1-enable, 0-disable.
+	 * Applications set/reset this configuration. If not reset, this
+	 * parameter remains in use until the driver is unloaded.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_RSN_IE = 56,
+
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST - 1,
@@ -3471,20 +3626,30 @@ enum qca_set_band {
  * enum set_reset_packet_filter - set packet filter control commands
  * @QCA_WLAN_SET_PACKET_FILTER: Set Packet Filter
  * @QCA_WLAN_GET_PACKET_FILTER: Get Packet filter
+ * @QCA_WLAN_WRITE_PACKET_FILTER: Write packet filter program/data
+ * @QCA_WLAN_READ_PACKET_FILTER: Read packet filter program/data
+ * @QCA_WLAN_ENABLE_PACKET_FILTER: Enable APF interpreter
+ * @QCA_WLAN_DISABLE_PACKET_FILTER: Disable APF interpreter
  */
 enum set_reset_packet_filter {
 	QCA_WLAN_SET_PACKET_FILTER = 1,
 	QCA_WLAN_GET_PACKET_FILTER = 2,
+	QCA_WLAN_WRITE_PACKET_FILTER = 3,
+	QCA_WLAN_READ_PACKET_FILTER = 4,
+	QCA_WLAN_ENABLE_PACKET_FILTER = 5,
+	QCA_WLAN_DISABLE_PACKET_FILTER = 6,
 };
 
 /**
- * enum qca_wlan_vendor_attr_packet_filter - BPF control commands
+ * enum qca_wlan_vendor_attr_packet_filter - APF control commands
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_INVALID: Invalid
  * @QCA_WLAN_VENDOR_ATTR_SET_RESET_PACKET_FILTER: Filter ID
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_VERSION: Filter Version
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_SIZE: Total Length
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_CURRENT_OFFSET: Current offset
- * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROGRAM: length of BPF instructions
+ * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROGRAM: length of APF instructions
+ * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROG_LENGTH: length of the program
+ *	section in packet filter buffer
  */
 enum qca_wlan_vendor_attr_packet_filter {
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_INVALID = 0,
@@ -3494,6 +3659,7 @@ enum qca_wlan_vendor_attr_packet_filter {
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_SIZE,
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_CURRENT_OFFSET,
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROGRAM,
+	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROG_LENGTH,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_AFTER_LAST,
@@ -4522,7 +4688,9 @@ enum qca_wlan_vendor_tdls_trigger_mode {
  *
  * This enumerates the valid set of values that may be supplied for
  * attribute %QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT in an instance of
- * the %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS vendor command.
+ * the %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS vendor command or in
+ * the response to an instance of the
+ * %QCA_NL80211_VENDOR_SUBCMD_GET_SAR_LIMITS vendor command.
  */
 enum qca_vendor_attr_sar_limits_selections {
 	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF0 = 0,
@@ -4546,7 +4714,8 @@ enum qca_vendor_attr_sar_limits_selections {
  * attribute %QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION in an
  * instance of attribute %QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC in an
  * instance of the %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS vendor
- * command.
+ * command or in the response to an instance of the
+ * %QCA_NL80211_VENDOR_SUBCMD_GET_SAR_LIMITS vendor command.
  */
 enum qca_vendor_attr_sar_limits_spec_modulations {
 	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_CCK = 0,
@@ -4603,7 +4772,8 @@ enum qca_vendor_attr_sar_limits_spec_modulations {
  *	value to specify the actual power limit value in steps of 0.5
  *	dbm.
  *
- * These attributes are used with %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS.
+ * These attributes are used with %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS
+ * and %QCA_NL80211_VENDOR_SUBCMD_GET_SAR_LIMITS.
  */
 enum qca_vendor_attr_sar_limits {
 	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_INVALID = 0,
@@ -5069,6 +5239,106 @@ enum qca_wlan_vendor_attr_spectral_scan {
 	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CONFIG_MAX =
 		QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CONFIG_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_config_latency_level - Level for
+ * wlan latency module.
+ *
+ * There will be various of Wi-Fi functionality like scan/roaming/adaptive
+ * power saving which would causing data exchange out of service, this
+ * would be a big impact on latency. For latency sensitive applications over
+ * Wi-Fi are intolerant to such operations and thus would configure them
+ * to meet their respective needs. It is well understood by such applications
+ * that altering the default behavior would degrade the Wi-Fi functionality
+ * w.r.t the above pointed WLAN operations.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_NORMAL:
+ *	Default WLAN operation level which throughput orientated.
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_MODERATE:
+ *	Use moderate level to improve latency by limit scan duration.
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_LOW:
+ *	Use low latency level to benifit application like concurrent
+ *	downloading or video streaming via constraint scan/adaptive PS.
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_ULTRALOW:
+ *	Use ultra low latency level to benefit for gaming/voice
+ *	application via constraint scan/roaming/adaptive PS.
+ */
+enum qca_wlan_vendor_attr_config_latency_level {
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_NORMAL = 1,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_MODERATE = 2,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_LOW = 3,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_ULTRALOW = 4,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_MAX =
+	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_mac - Used by the vendor command
+ * QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_MAC_INFO: MAC mode info list which has an
+ *  array of nested values as per attributes in
+ *  enum qca_wlan_vendor_attr_mac_mode_info.
+ */
+enum qca_wlan_vendor_attr_mac {
+	QCA_WLAN_VENDOR_ATTR_MAC_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_MAC_INFO = 1,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_MAC_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_MAC_MAX =
+		QCA_WLAN_VENDOR_ATTR_MAC_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_mac_iface_info - Information of the connected
+ * WiFi netdev interface on a respective MAC. Used by the attribute
+ * QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_ID: Wi-Fi Netdev's interface id(u32).
+ * @QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_FREQ: Associated frequency in MHz of
+ *  the connected Wi-Fi interface(u32).
+ */
+enum qca_wlan_vendor_attr_mac_iface_info {
+	QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_IFINDEX = 1,
+	QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_FREQ = 2,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_MAX =
+		QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO_AFTER_LAST - 1,
+};
+
+/**
+ * enum qca_wlan_vendor_attr_mac_info - Points to MAC the information.
+ *  Used by the attribute QCA_WLAN_VENDOR_ATTR_MAC_INFO of the
+ *	vendor command QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_MAC_INFO_MAC_ID: Hardware MAC ID associated for the
+ *  MAC (u32)
+ * @QCA_WLAN_VENDOR_ATTR_MAC_INFO_BAND: Band supported by the respective MAC
+ *  at a given point. This is a u32 bitmask of BIT(NL80211_BAND_*) as described
+ *  in enum nl80211_band.
+ * @QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO: Refers to list of WLAN net dev
+ * interfaces associated with this MAC. Represented by enum
+ * qca_wlan_vendor_attr_mac_iface_info.
+ */
+enum qca_wlan_vendor_attr_mac_info {
+	QCA_WLAN_VENDOR_ATTR_MAC_INFO_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_MAC_INFO_MAC_ID = 1,
+	QCA_WLAN_VENDOR_ATTR_MAC_INFO_BAND = 2,
+	QCA_WLAN_VENDOR_ATTR_MAC_IFACE_INFO = 3,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_MAC_INFO_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_MAC_INFO_MAX =
+		QCA_WLAN_VENDOR_ATTR_MAC_INFO_AFTER_LAST - 1,
 };
 
 #if !(defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) &&	\

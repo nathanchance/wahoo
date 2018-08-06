@@ -107,11 +107,12 @@
 	} while (0)
 
 #define READ_OPTIONAL_PROP(_node, _key, _val, _ret, _dest) do { \
-		_ret = of_property_read_u32(_node, _key, &_val); \
-		if (_ret && _ret != -EINVAL) { \
+		int __ret = of_property_read_u32(_node, _key, &_val); \
+		if (__ret && __ret != -EINVAL) { \
+			_ret = __ret; \
 			pr_err("Error reading key:%s. err:%d\n", _key, _ret); \
 			goto bcl_dev_exit; \
-		} else if (!_ret) { \
+		} else if (!__ret) { \
 			_dest = _val; \
 		} \
 	} while (0)
@@ -161,6 +162,7 @@ struct bcl_device {
 	uint16_t			fg_lmh_addr;
 	int				i_src;
 	struct bcl_peripheral_data	param[BCL_PARAM_MAX];
+	u32				vbat_too_low_threshold;
 };
 
 static struct bcl_device *bcl_perph;
@@ -423,13 +425,13 @@ static int bcl_set_low_vbat(int thresh_value)
 		pr_debug("Setting Vbat low comparator threshold:0x%x.\n",
 			BCL_VBAT_LOW_THRESHOLD);
 		ret = bcl_write_register(BCL_8998_VBAT_COMP_TLOW,
-			BCL_VBAT_TLOW_THRESHOLD);
+			bcl_perph->vbat_too_low_threshold);
 		if (ret) {
 			pr_err("Error accessing BCL peripheral. err:%d\n", ret);
 			return ret;
 		}
 		pr_debug("Setting Vbat too low comparator threshold:0x%x.\n",
-			BCL_VBAT_TLOW_THRESHOLD);
+			bcl_perph->vbat_too_low_threshold);
 	}
 	bcl_perph->param[BCL_PARAM_VOLTAGE].low_trip = thresh_value;
 
@@ -1032,6 +1034,10 @@ static int bcl_get_devicetree_data(struct platform_device *pdev)
 	key = "qcom,ibat-polling-delay-ms";
 	READ_CONV_FACTOR(dev_node, key, temp_val, ret,
 		bcl_perph->param[BCL_PARAM_CURRENT].polling_delay_ms);
+	key = "qcom,vbat-too-low-threshold";
+	bcl_perph->vbat_too_low_threshold = BCL_VBAT_TLOW_THRESHOLD;
+	READ_OPTIONAL_PROP(dev_node, key, temp_val, ret,
+		bcl_perph->vbat_too_low_threshold);
 
 bcl_dev_exit:
 	return ret;

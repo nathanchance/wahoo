@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -537,7 +537,7 @@ static void hdd_power_debugstats_cb(struct power_stats_response *response,
 	if ((POWER_STATS_MAGIC != stats_context->magic) ||
 		(!adapter) || (WLAN_HDD_ADAPTER_MAGIC != adapter->magic)) {
 		spin_unlock(&hdd_context_lock);
-		hdd_err("Invalid context, adapter [%p] magic [%08x]",
+		hdd_err("Invalid context, adapter [%pK] magic [%08x]",
 				adapter, stats_context->magic);
 		return;
 	}

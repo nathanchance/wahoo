@@ -122,7 +122,7 @@ static void fts_control_ta_detect_pin(struct fts_ts_info *info)
 
 	ta_pin = gpio_get_value(info->board->ta_detect_pin);
 
-	tsp_debug_info(&info->client->dev,
+	tsp_debug_dbg(&info->client->dev,
 			"%s: ta_detect_pin status = %d.\n",
 			__func__, ta_pin);
 }
@@ -140,7 +140,7 @@ static void fts_external_power_changed(struct power_supply *psy)
 		power_supply_get_property(info->usb_psy,
 					  POWER_SUPPLY_PROP_ONLINE, &prop);
 		if (info->charger_connected != prop.intval) {
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_dbg(&info->client->dev,
 				"%s: charger_connected transition: %d => %d.\n",
 				__func__, info->charger_connected, prop.intval);
 			info->charger_connected = prop.intval;
@@ -879,6 +879,113 @@ static void fts_debug_msg_event_handler(struct fts_ts_info *info,
 	       data[4], data[5], data[6], data[7]);
 }
 
+static void fts_error_event_handler(struct fts_ts_info *info,
+					unsigned char data[])
+{
+	unsigned char error_type = data[1];
+
+	if (error_type == EVENTID_ERROR_M3)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_M3");
+	else if (error_type == EVENTID_ERROR_AFE)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_AFE");
+	else if (error_type == EVENTID_ERROR_FLASH_CORRUPTION)
+		tsp_debug_info(&info->client->dev,
+			"EVENTID_ERROR_FLASH_CORRUPTION");
+	else if (error_type == EVENTID_ERROR_ITO)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_ITO");
+	else if (error_type == EVENTID_ERROR_OSC_TRIM)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_OSC_TRIM");
+	else if (error_type == EVENTID_ERROR_RTOS)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_RTOS");
+	else if (error_type == EVENTID_ERROR_CX_TUNE)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_CX_TUNE");
+	else if (error_type == EVENTID_ERROR_LIB)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_LIB");
+	else
+		fts_debug_msg_event_handler(info, data);
+}
+
+static void fts_status_event_handler(struct fts_ts_info *info,
+					unsigned char status,
+					unsigned char data[])
+{
+	if (status == STATUS_EVENT_MUTUAL_AUTOTUNE_DONE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Mutual Autotune Done Event\n");
+	} else if (status == STATUS_EVENT_SELF_AUTOTUNE_DONE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Self Autotune Done Event\n");
+	} else if (status == STATUS_EVENT_FLASH_WRITE_CONFIG) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Flash Write Config Event\n");
+	} else if (status == STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Flash Write CX Tune Event\n");
+	} else if (status == STATUS_EVENT_FORCE_CALIBRATION) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Force Cal Event [ %x ]\n",
+			data[4]);
+	} else if (status == STATUS_EVENT_FORCE_CAL_DONE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Force Cal Done Event\n");
+	} else if (status == STATUS_EVENT_RESERVED) {
+		tsp_debug_dbg(&info->client->dev,
+			"[FTS] Received Reserved Event\n");
+	} else if (status == STATUS_EVENT_LOCKDOWN_FOR_LGD) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Lockdown Event\n");
+	} else if (status == STATUS_EVENT_FRAME_DROP) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Frame Drop Event\n");
+	} else if (status == STATUS_EVENT_WATER_MODE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Water Mode Event [ %s ]\n",
+			(data[2] == 0) ? "OFF" : "ON");
+	} else if (status == STATUS_EVENT_PURE_AUTOTUNE_FLAG_WRITE_FINISH) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Pure Autotune Write Finish Event\n");
+	} else if (status == STATUS_EVENT_PURE_AUTOTUNE_FLAG_CLEAR_FINISH) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Pure Autotune Clear Finish Event\n");
+	} else if (status == STATUS_EVENT_BASIC_AUTOTUNE_PROTECTION) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Basic Autotune Protection Event [ %x ]\n",
+			data[2]);
+	} else if (status == STATUS_EVENT_FLASH_WRITE_AUTOTUNE_VALUE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Flash Write Autotune Value Event\n");
+	} else if (status == STATUS_EVENT_F_CAL_AFTER_AUTOTUNE_PROTECTION) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received F Cal After Autotune Event\n");
+	} else if (status == STATUS_EVENT_CHARGER_CONNECTED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Charger Connected Event\n");
+	} else if (status == STATUS_EVENT_CHARGER_DISCONNECTED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Charger Disconnected Event\n");
+	} else if (status == STATUS_EVENT_WIRELESS_CHARGER_ON) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Wireless Charger On Event\n");
+	} else if (status == STATUS_EVENT_WIRELESS_CHARGER_OFF) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Wireless Charger Off Event\n");
+	} else if (status == STATUS_EVENT_REBOOT_BY_ESD) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received ESD detected Event need to Reset\n");
+		schedule_delayed_work(&info->reset_work, msecs_to_jiffies(10));
+	} else if (status == STATUS_EVENT_VR_MODE_ENABLED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received VR Mode Enabled Event\n");
+		info->vr_mode = 1;
+	} else if (status == STATUS_EVENT_VR_MODE_DISABLED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received VR Mode Disabled Event\n");
+		info->vr_mode = 0;
+	} else
+		fts_debug_msg_event_handler(info,
+				  data);
+}
+
 static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 					      unsigned char data[],
 					      unsigned char LeftEvent)
@@ -887,6 +994,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 	unsigned char NumTouches = 0;
 	unsigned char TouchID = 0, EventID = 0, status = 0;
 	unsigned char LastLeftEvent = 0;
+	unsigned int  slotsReported = 0;
 	int x = 0, y = 0, z = 0;
 	int bw = 0, bh = 0, palm = 0;
 	int orient = 0;
@@ -932,28 +1040,25 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			status = data[1 + EventNum * FTS_EVENT_SIZE] & 0xFF;
 		}
 
+		/* If a slot is reported more than once within an irq, sync
+		 * between the events. This should be an uncommon occurrence.
+		 */
+		if (slotsReported & (1 << TouchID)) {
+			input_sync(info->input_dev);
+			slotsReported = 0;
+			tsp_debug_err(&info->client->dev,
+				      "%s: Syncing between duplicate slots.\n",
+				      __func__);
+		}
+		slotsReported |= (1 << TouchID);
+
 		switch (EventID) {
 		case EVENTID_NO_EVENT:
 			break;
 
 		case EVENTID_ERROR:
-			if (data[1 + EventNum *
-					FTS_EVENT_SIZE] == 0x08) {
-				/* Get Auto tune fail event */
-				if (data[2 + EventNum *
-						FTS_EVENT_SIZE] == 0x00) {
-					tsp_debug_err(&info->client->dev,
-							"[FTS] Fail Mutual Auto tune\n");
-				} else if (data[2 + EventNum *
-							FTS_EVENT_SIZE] == 0x01) {
-					tsp_debug_err(&info->client->dev,
-							"[FTS] Fail Self Auto tune\n");
-				}
-			} else if (data[1 + EventNum *
-							FTS_EVENT_SIZE] == 0x09)
-				/*  Get detect SYNC fail event */
-				tsp_debug_err(&info->client->dev,
-						"[FTS] Fail detect SYNC\n");
+			fts_error_event_handler(info,
+					&data[EventNum * FTS_EVENT_SIZE]);
 			break;
 
 		case EVENTID_HOVER_ENTER_POINTER:
@@ -1111,51 +1216,10 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			}
 			break;
 		case EVENTID_STATUS_EVENT:
-			if (status == STATUS_EVENT_GLOVE_MODE) {
-
-			} else if (status == STATUS_EVENT_RAW_DATA_READY) {
-				unsigned char regAdd[4] = {0xB0, 0x01, 0x29, 0x01};
-
-				fts_write_reg(info, &regAdd[0], 4);
-
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received the Raw Data Ready Event\n");
-			} else if (status == STATUS_EVENT_FORCE_CAL_MUTUAL) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Force Calibration Mutual only Event\n");
-			} else if (status == STATUS_EVENT_FORCE_CAL_SELF) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Force Calibration Self only Event\n");
-			} else if (status == STATUS_EVENT_WATERMODE_ON) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Water Mode On Event\n");
-			} else if (status == STATUS_EVENT_WATERMODE_OFF) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Water Mode Off Event\n");
-			} else if (status == STATUS_EVENT_MUTUAL_CAL_FRAME_CHECK) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Mutual Calib Frame Check Event\n");
-			} else if (status == STATUS_EVENT_SELF_CAL_FRAME_CHECK) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Self Calib Frame Check Event\n");
-			} else if (status == FTS_EVENT_REBOOT_BY_ESD) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received ESD detected Event need to Reset\n");
-				schedule_delayed_work(&info->reset_work,
-					msecs_to_jiffies(10));
-			} else if (status == FTS_EVENT_VR_MODE_ENABLED) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received VR Mode Enabled Event\n");
-				info->vr_mode = 1;
-			} else if (status == FTS_EVENT_VR_MODE_DISABLED) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received VR Mode Disabled Event\n");
-				info->vr_mode = 0;
-			} else {
-				fts_debug_msg_event_handler(info,
-						  &data[EventNum *
+			fts_status_event_handler(info,
+						status,
+						&data[EventNum *
 							FTS_EVENT_SIZE]);
-			}
 			break;
 
 #ifdef FEATURE_FTS_PRODUCTION_CODE
@@ -1210,10 +1274,9 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			(EventID == EVENTID_MOTION_POINTER) ||
 			(EventID == EVENTID_LEAVE_POINTER))
 			info->finger[TouchID].state = EventID;
-
-		input_sync(info->input_dev);
 	}
 
+	input_sync(info->input_dev);
 
 #if defined(CONFIG_INPUT_BOOSTER)
 	if ((EventID == EVENTID_ENTER_POINTER)
@@ -1266,6 +1329,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned char regAdd[4] = {0xB6, 0x00, 0x23, READ_ALL_EVENT};
 	unsigned short evtcount = 0;
 
+	/* prevent CPU from entering deep sleep */
+	pm_qos_update_request(&info->pm_qos_req, 100);
 	evtcount = 0;
 
 	fts_read_reg(info, &regAdd[0], 3, (unsigned char *)&evtcount, 2);
@@ -1281,6 +1346,7 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 				  FTS_EVENT_SIZE * evtcount);
 		fts_event_handler_type_b(info, info->data, evtcount);
 	}
+	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	return IRQ_HANDLED;
 }
 
@@ -2032,6 +2098,9 @@ static int fts_input_open(struct input_dev *dev)
 		fts_command(info, FTS_CMD_HOVER_ON);
 	}
 
+	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+			PM_QOS_DEFAULT_VALUE);
+
 out:
 	return 0;
 }
@@ -2041,6 +2110,8 @@ static void fts_input_close(struct input_dev *dev)
 	struct fts_ts_info *info = input_get_drvdata(dev);
 
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
+
+	pm_qos_remove_request(&info->pm_qos_req);
 
 #ifdef USE_OPEN_DWORK
 	cancel_delayed_work(&info->open_work);
@@ -2423,13 +2494,12 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 		container_of(self, struct fts_ts_info, fb_notif);
 	struct fb_event *ev = (struct fb_event *)data;
 
-	if (ev && ev->data && event == FB_EVENT_BLANK) {
+	if (ev && ev->data) {
 		int *blank = (int *)ev->data;
-
-		if (*blank == FB_BLANK_UNBLANK)
-			fts_resume(info->client);
-		else
+		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK)
 			fts_suspend(info->client, PMSG_SUSPEND);
+		else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
+			fts_resume(info->client);
 	}
 
 	return 0;

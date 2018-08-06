@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -134,13 +134,15 @@ void pktlog_callback(void *pdev, enum WDI_EVENT event, void *log_data);
 void pktlog_init(struct hif_opaque_softc *scn);
 int pktlog_enable(struct hif_opaque_softc *scn, int32_t log_state,
 		 bool, uint8_t, uint32_t);
+int __pktlog_enable(struct hif_opaque_softc *scn, int32_t log_state,
+		 bool, uint8_t, uint32_t);
 int pktlog_setsize(struct hif_opaque_softc *scn, int32_t log_state);
 int pktlog_clearbuff(struct hif_opaque_softc *scn, bool clear_buff);
 int pktlog_disable(struct hif_opaque_softc *scn);
 int pktlogmod_init(void *context);
 void pktlogmod_exit(void *context);
 int pktlog_htc_attach(void);
-void pktlog_process_fw_msg(uint32_t *msg_word);
+void pktlog_process_fw_msg(uint32_t *msg_word, uint32_t msg_len);
 
 #define ol_pktlog_attach(_scn)			\
 	do {					\
@@ -168,6 +170,12 @@ static int pktlog_enable(struct hif_opaque_softc *scn, int32_t log_state,
 {
 	return 0;
 }
+static int __pktlog_enable(struct hif_opaque_softc *scn, int32_t log_state,
+			 bool ini, uint8_t user, uint32_t is_iwpriv_command)
+{
+	return 0;
+}
+
 static int pktlog_setsize(struct hif_opaque_softc *scn, int32_t log_state)
 {
 	return 0;
@@ -184,7 +192,7 @@ static inline int pktlog_htc_attach(void)
 {
 	return 0;
 }
-static inline void pktlog_process_fw_msg(uint32_t *msg_word)
+static inline void pktlog_process_fw_msg(uint32_t *msg_word, uint32_t msg_len)
 { }
 #endif /* REMOVE_PKT_LOG */
 #endif /* _PKTLOG_AC_H_ */

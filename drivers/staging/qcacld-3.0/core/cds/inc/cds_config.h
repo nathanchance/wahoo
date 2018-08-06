@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -42,17 +42,61 @@ enum cfg_sub_20_channel_width {
 };
 
 /**
- * enum active_bpf_mode - the modes active BPF can operate in
- * @ACTIVE_BPF_DISABLED: BPF is disabled in active mode
- * @ACTIVE_BPF_ENABLED: BPF is enabled for all packets
- * @ACTIVE_BPF_ADAPTIVE: BPF is enabled for packets up to some threshold
- * @ACTIVE_BPF_MODE_COUNT: The number of active BPF modes
+ * enum active_apf_mode - the modes active APF can operate in
+ * @ACTIVE_APF_DISABLED: APF is disabled in active mode
+ * @ACTIVE_APF_ENABLED: APF is enabled for all packets
+ * @ACTIVE_APF_ADAPTIVE: APF is enabled for packets up to some threshold
+ * @ACTIVE_APF_MODE_COUNT: The number of active APF modes
  */
-enum active_bpf_mode {
-	ACTIVE_BPF_DISABLED = 0,
-	ACTIVE_BPF_ENABLED,
-	ACTIVE_BPF_ADAPTIVE,
-	ACTIVE_BPF_MODE_COUNT
+enum active_apf_mode {
+	ACTIVE_APF_DISABLED = 0,
+	ACTIVE_APF_ENABLED,
+	ACTIVE_APF_ADAPTIVE,
+	ACTIVE_APF_MODE_COUNT
+};
+
+/**
+ * enum cds_hang_reason - host hang/ssr reason
+ * @CDS_REASON_UNSPECIFIED: Unspecified reason
+ * @CDS_RX_HASH_NO_ENTRY_FOUND: No Map for the MAC entry for the received frame
+ * @CDS_PEER_DELETION_TIMEDOUT: peer deletion timeout happened
+ * @CDS_PEER_UNMAP_TIMEDOUT: peer unmap timeout
+ * @CDS_SCAN_REQ_EXPIRED: Scan request timed out
+ * @CDS_SCAN_ATTEMPT_FAILURES: Consecutive Scan attempt failures
+ * @CDS_GET_MSG_BUFF_FAILURE: Unable to get the message buffer
+ * @CDS_ACTIVE_LIST_TIMEOUT: Current command processing is timedout
+ * @CDS_SUSPEND_TIMEOUT: Timeout for an ACK from FW for suspend request
+ * @CDS_RESUME_TIMEOUT: Timeout for an ACK from FW for resume request
+ */
+enum cds_hang_reason {
+	CDS_REASON_UNSPECIFIED = 0,
+	CDS_RX_HASH_NO_ENTRY_FOUND = 1,
+	CDS_PEER_DELETION_TIMEDOUT = 2,
+	CDS_PEER_UNMAP_TIMEDOUT = 3,
+	CDS_SCAN_REQ_EXPIRED = 4,
+	CDS_SCAN_ATTEMPT_FAILURES = 5,
+	CDS_GET_MSG_BUFF_FAILURE = 6,
+	CDS_ACTIVE_LIST_TIMEOUT = 7,
+	CDS_SUSPEND_TIMEOUT = 8,
+	CDS_RESUME_TIMEOUT = 9,
+};
+
+/**
+ * enum cds_auto_pwr_detect_failure_mode_t - auto detect failure modes
+ * @CDS_FW_TO_CRASH_ON_PWR_FAILURE: Don't register wow wakeup event and FW
+ * crashes on power failure
+ * @CDS_FW_TO_SEND_WOW_IND_ON_PWR_FAILURE: Register wow wakeup event and FW
+ * sends failure event to host on power failure
+ * @CDS_FW_TO_REJUVENATE_ON_PWR_FAILURE: Don't register wow wakeup event and
+ * FW silently rejuvenate on power failure
+ * @CDS_AUTO_PWR_FAILURE_DETECT_DISABLE: Don't register wow wakeup event and the
+ * auto power failure detect feature is disabled in FW.
+ */
+enum cds_auto_pwr_detect_failure_mode_t {
+	CDS_FW_TO_CRASH_ON_PWR_FAILURE,
+	CDS_FW_TO_SEND_WOW_IND_ON_PWR_FAILURE,
+	CDS_FW_TO_REJUVENATE_ON_PWR_FAILURE,
+	CDS_AUTO_PWR_FAILURE_DETECT_DISABLE
 };
 
 /**
@@ -94,18 +138,22 @@ enum active_bpf_mode {
  * @tx_flow_start_queue_offset: Start queue offset in percentage
  * @is_lpass_enabled: Indicate whether LPASS is enabled or not
  * @is_nan_enabled: Indicate whether NAN is enabled or not
- * @bool bpf_packet_filter_enable; Indicate bpf filter enabled or not
+ * @bool apf_packet_filter_enable; Indicate apf filter enabled or not
  * @tx_chain_mask_cck: Tx chain mask enabled or not
  * @self_gen_frm_pwr: Self gen from power
  * @sub_20_channel_width: Sub 20 MHz ch width, ini intersected with fw cap
  * @flow_steering_enabled: Receive flow steering.
  * @is_fw_timeout: Indicate whether crash host when fw timesout or not
  * @force_target_assert_enabled: Indicate whether target assert enabled or not
- * @active_uc_bpf_mode: Setting that determines how BPF is applied in active
+ * @active_uc_apf_mode: Setting that determines how APF is applied in active
  * mode for uc packets
- * @active_mc_bc_bpf_mode: Setting that determines how BPF is applied in
+ * @active_mc_bc_apf_mode: Setting that determines how APF is applied in
  * active mode for MC/BC packets
  * @rps_enabled: RPS enabled in SAP mode
+ * @ito_repeat_count: Indicates ito repeated count
+ * @bandcapability: Configured band by user
+ * @etsi_srd_chan_in_master_mode: Use of ETSI SRD chan in SAP/P2P-GO ACS/PCL
+ * @dot11p_mode: dot11p user configuration
  * Structure for holding cds ini parameters.
  */
 
@@ -151,7 +199,7 @@ struct cds_config_info {
 #ifdef WLAN_FEATURE_NAN
 	bool is_nan_enabled;
 #endif
-	bool bpf_packet_filter_enable;
+	bool apf_packet_filter_enable;
 	bool tx_chain_mask_cck;
 	uint16_t self_gen_frm_pwr;
 	enum cfg_sub_20_channel_width sub_20_channel_width;
@@ -163,17 +211,23 @@ struct cds_config_info {
 	struct ol_tx_sched_wrr_ac_specs_t ac_specs[TX_WMM_AC_NUM];
 
 	bool force_target_assert_enabled;
-	enum active_bpf_mode active_uc_bpf_mode;
-	enum active_bpf_mode active_mc_bc_bpf_mode;
+	enum active_apf_mode active_uc_apf_mode;
+	enum active_apf_mode active_mc_bc_apf_mode;
 	bool rps_enabled;
-	bool auto_power_save_fail_mode;
+	enum cds_auto_pwr_detect_failure_mode_t auto_power_save_fail_mode;
+	uint8_t ito_repeat_count;
+	uint8_t bandcapability;
+	bool etsi_srd_chan_in_master_mode;
+	uint8_t dot11p_mode;
 };
 
 #ifdef WLAN_FEATURE_FILS_SK
 #define MAX_PMK_LEN 48
-#define FILS_MAX_KEYNAME_NAI_LENGTH 255
+#define MAX_PMKID_LEN 16
+#define FILS_MAX_KEYNAME_NAI_LENGTH 253
 #define FILS_MAX_REALM_LEN 255
 #define FILS_MAX_RRK_LENGTH 64
+#define FILS_MAX_RIK_LENGTH FILS_MAX_RRK_LENGTH
 
 struct cds_fils_connection_info {
 	bool is_fils_connection;

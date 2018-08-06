@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -746,8 +746,8 @@ static bool lim_chk_n_process_wpa_rsn_ie(tpAniSirGlobal mac_ctx,
 					 uint8_t sub_type, bool *pmf_connection)
 {
 	uint8_t *wps_ie = NULL;
-	tDot11fIEWPA dot11f_ie_wpa;
-	tDot11fIERSN dot11f_ie_rsn;
+	tDot11fIEWPA dot11f_ie_wpa = {0};
+	tDot11fIERSN dot11f_ie_rsn = {0};
 	tSirRetStatus status = eSIR_SUCCESS;
 	/*
 	 * Clear the buffers so that frame parser knows that there isn't a
@@ -847,7 +847,8 @@ static bool lim_chk_n_process_wpa_rsn_ie(tpAniSirGlobal mac_ctx,
 						session);
 					return false;
 				}
-			} else if (assoc_req->wpaPresent) {
+			} /* end - if(assoc_req->rsnPresent) */
+			if ((!assoc_req->rsnPresent) && assoc_req->wpaPresent) {
 				/* Unpack the WPA IE */
 				if (assoc_req->wpa.length) {
 					/* OUI is not taken care */
@@ -896,31 +897,7 @@ static bool lim_chk_n_process_wpa_rsn_ie(tpAniSirGlobal mac_ctx,
 						session);
 					return false;
 				} /* end - if(assoc_req->wpa.length) */
-			} else if (assoc_req->wapiPresent) {
-				pe_debug("Assoc req wapiPresent");
-			} else {
-				/*
-				 * When client send AssocReq without any
-				 * cipher IE,We must reject it here,
-				 * otherwise hostapd will not trigger
-				 * eapol and will not delete it, remains
-				 * connected/not-authenticated state
-				 * and block sta scan as checking in
-				 * cds_is_connection_in_progress.
-				 */
-				pe_warn("Re/Assoc rejected from: "
-					MAC_ADDRESS_STR
-					" without cipher suite IE",
-					MAC_ADDR_ARRAY(hdr->sa));
-				lim_send_assoc_rsp_mgmt_frame(mac_ctx,
-					eSIR_MAC_CIPHER_SUITE_REJECTED_STATUS,
-					1,
-					hdr->sa,
-					sub_type,
-					0,
-					session);
-				return false;
-			}
+			} /* end - if(assoc_req->wpaPresent) */
 		}
 		/*
 		 * end of if(session->pLimStartBssReq->privacy
@@ -965,7 +942,7 @@ static bool lim_process_assoc_req_no_sta_ctx(tpAniSirGlobal mac_ctx,
 				mac_ctx->lim.maxStation);
 		lim_reject_association(mac_ctx, hdr->sa, sub_type, false,
 			(tAniAuthType) 0, 0, false,
-			(tSirResultCodes) eSIR_MAC_UNSPEC_FAILURE_STATUS,
+			eSIR_MAC_UNSPEC_FAILURE_STATUS,
 			session);
 		return false;
 	}
@@ -1158,6 +1135,7 @@ static bool lim_chk_wmm(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 			uint8_t sub_type, tHalBitVal qos_mode)
 {
 	tHalBitVal wme_mode;
+
 	limGetWmeMode(session, &wme_mode);
 	if ((qos_mode == eHAL_SET) || (wme_mode == eHAL_SET)) {
 		/*
@@ -1166,6 +1144,7 @@ static bool lim_chk_wmm(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 		 */
 		if (assoc_req->addtsPresent) {
 			uint8_t tspecIdx = 0;
+
 			if (lim_admit_control_add_ts(mac_ctx, hdr->sa,
 				&(assoc_req->addtsReq),
 				&(assoc_req->qosCapability),
@@ -1401,18 +1380,30 @@ static bool lim_update_sta_ds(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 		sta_ds->mlmStaContext.htCapability = 0;
 		sta_ds->mlmStaContext.vhtCapability = 0;
 	}
-	if (sta_ds->mlmStaContext.vhtCapability) {
+
+	if (sta_ds->mlmStaContext.vhtCapability && vht_caps) {
 		if (session->vht_config.su_beam_formee &&
-				assoc_req->VHTCaps.suBeamFormerCap)
+				vht_caps->suBeamFormerCap)
 			sta_ds->vhtBeamFormerCapable = 1;
 		else
 			sta_ds->vhtBeamFormerCapable = 0;
 		if (session->vht_config.su_beam_former &&
-				assoc_req->VHTCaps.suBeamformeeCap)
+				vht_caps->suBeamformeeCap)
 			sta_ds->vht_su_bfee_capable = 1;
 		else
 			sta_ds->vht_su_bfee_capable = 0;
+
+		pe_debug("peer_caps: suBformer: %d, suBformee: %d",
+			 vht_caps->suBeamFormerCap,
+			 vht_caps->suBeamformeeCap);
+		pe_debug("self_cap: suBformer: %d, suBformee: %d",
+			 session->vht_config.su_beam_former,
+			 session->vht_config.su_beam_formee);
+		pe_debug("connection's final cap: suBformer: %d, suBformee: %d",
+			 sta_ds->vhtBeamFormerCapable,
+			 sta_ds->vht_su_bfee_capable);
 	}
+
 	if (lim_populate_matching_rate_set(mac_ctx, sta_ds,
 			&(assoc_req->supportedRates),
 			&(assoc_req->extendedRates),
@@ -1428,7 +1419,7 @@ static bool lim_update_sta_ds(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 
 		lim_reject_association(mac_ctx, hdr->sa,
 			sub_type, true, auth_type, peer_idx, false,
-			(tSirResultCodes)eSIR_MAC_UNSPEC_FAILURE_STATUS,
+			eSIR_MAC_UNSPEC_FAILURE_STATUS,
 			session);
 		pe_err("Delete dph hash entry");
 		if (dph_delete_hash_entry(mac_ctx, hdr->sa, sta_ds->assocId,
@@ -1513,14 +1504,15 @@ static bool lim_update_sta_ds(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 		pe_err("Couldn't get PMF SA Query retry interval value");
 		lim_reject_association(mac_ctx, hdr->sa, sub_type, true,
 			auth_type, peer_idx, false,
-			(tSirResultCodes) eSIR_MAC_UNSPEC_FAILURE_STATUS,
+			eSIR_MAC_UNSPEC_FAILURE_STATUS,
 			session);
 		return false;
 	}
 	if (WNI_CFG_PMF_SA_QUERY_RETRY_INTERVAL_STAMIN > retry_interval) {
 		retry_interval = WNI_CFG_PMF_SA_QUERY_RETRY_INTERVAL_STADEF;
 	}
-	if (tx_timer_create(mac_ctx, &sta_ds->pmfSaQueryTimer,
+	if (sta_ds->rmfEnabled &&
+		tx_timer_create(mac_ctx, &sta_ds->pmfSaQueryTimer,
 			"PMF SA Query timer", lim_pmf_sa_query_timer_handler,
 			timer_id.value,
 			SYS_MS_TO_TICKS((retry_interval * 1024) / 1000),
@@ -1528,10 +1520,13 @@ static bool lim_update_sta_ds(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 		pe_err("could not create PMF SA Query timer");
 		lim_reject_association(mac_ctx, hdr->sa, sub_type,
 			true, auth_type, peer_idx, false,
-			(tSirResultCodes)eSIR_MAC_UNSPEC_FAILURE_STATUS,
+			eSIR_MAC_UNSPEC_FAILURE_STATUS,
 			session);
 		return false;
 	}
+	if (sta_ds->rmfEnabled)
+	    pe_debug("Created pmf timer sta-idx:%d assoc-id:%d",
+		     sta_ds->staIndex, sta_ds->assocId);
 #endif
 
 	if (assoc_req->ExtCap.present) {
@@ -1586,7 +1581,7 @@ static bool lim_update_sta_ctx(tpAniSirGlobal mac_ctx, tpPESession session,
 				sta_ds->mlmStaContext.subType, true,
 				sta_ds->mlmStaContext.authType,
 				sta_ds->assocId, true,
-				(tSirResultCodes)eSIR_MAC_UNSPEC_FAILURE_STATUS,
+				eSIR_MAC_UNSPEC_FAILURE_STATUS,
 				session);
 
 			if (session->parsedAssocReq)
@@ -1617,8 +1612,7 @@ static bool lim_update_sta_ctx(tpAniSirGlobal mac_ctx, tpPESession session,
 					sta_ds->mlmStaContext.subType, true,
 					sta_ds->mlmStaContext.authType,
 					sta_ds->assocId, true,
-					(tSirResultCodes)
-						eSIR_MAC_UNSPEC_FAILURE_STATUS,
+					eSIR_MAC_UNSPEC_FAILURE_STATUS,
 					session);
 
 				/* Restoring the state back. */
@@ -1640,8 +1634,7 @@ static bool lim_update_sta_ctx(tpAniSirGlobal mac_ctx, tpPESession session,
 					sta_ds->mlmStaContext.subType, true,
 					sta_ds->mlmStaContext.authType,
 					sta_ds->assocId, true,
-					(tSirResultCodes)
-						eSIR_MAC_WME_REFUSED_STATUS,
+					eSIR_MAC_WME_REFUSED_STATUS,
 					session);
 
 				/* Restoring the state back. */
@@ -1789,6 +1782,20 @@ void lim_process_assoc_req_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 				MAC_ADDRESS_STR, session->peSessionId,
 			sub_type, GET_LIM_SYSTEM_ROLE(session),
 			MAC_ADDR_ARRAY(hdr->sa));
+			return;
+		} else if (!sta_ds->rmfEnabled && (sub_type == LIM_REASSOC)) {
+			/*
+			 * SAP should send reassoc response with reject code
+			 * to avoid IOT issues. as per the specification SAP
+			 * should do 4-way handshake after reassoc response and
+			 * some STA doesn't like 4way handshake after reassoc
+			 * where some STA does expect 4-way handshake.
+			 */
+			lim_send_assoc_rsp_mgmt_frame(mac_ctx,
+					eSIR_MAC_OUTSIDE_SCOPE_OF_SPEC_STATUS,
+					sta_ds->assocId, sta_ds->staAddr,
+					sub_type, sta_ds, session);
+			pe_err("Rejecting reassoc req from STA");
 			return;
 		} else if (!sta_ds->rmfEnabled) {
 			/*
@@ -1960,7 +1967,7 @@ void lim_process_assoc_req_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 		pe_err("PeerIdx not avaialble. Reject associaton");
 		lim_reject_association(mac_ctx, hdr->sa, sub_type,
 				true, auth_type, peer_idx, false,
-				(tSirResultCodes)eSIR_MAC_UNSPEC_FAILURE_STATUS,
+				eSIR_MAC_UNSPEC_FAILURE_STATUS,
 				session);
 		goto error;
 	}
@@ -1980,7 +1987,7 @@ void lim_process_assoc_req_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 
 		lim_reject_association(mac_ctx, hdr->sa, sub_type,
 			true, auth_type, peer_idx, false,
-			(tSirResultCodes) eSIR_MAC_UNSPEC_FAILURE_STATUS,
+			eSIR_MAC_UNSPEC_FAILURE_STATUS,
 			session);
 		goto error;
 	}
@@ -2071,9 +2078,12 @@ static void lim_fill_assoc_ind_wapi_info(tpAniSirGlobal mac_ctx,
 static void lim_fill_assoc_ind_vht_info(tpAniSirGlobal mac_ctx,
 					tpPESession session_entry,
 					tpSirAssocReq assoc_req,
-					tpLimMlmAssocInd assoc_ind)
+					tpLimMlmAssocInd assoc_ind,
+					tpDphHashNode sta_ds)
 {
 	uint8_t chan;
+	uint8_t i;
+	bool nw_type_11b = true;
 
 	if (session_entry->limRFBand == SIR_BAND_2_4_GHZ) {
 		if (session_entry->vhtCapability && assoc_req->VHTCaps.present)
@@ -2081,8 +2091,19 @@ static void lim_fill_assoc_ind_vht_info(tpAniSirGlobal mac_ctx,
 		else if (session_entry->htCapability
 			    && assoc_req->HTCaps.present)
 			assoc_ind->chan_info.info = MODE_11NG_HT20;
-		else
-			assoc_ind->chan_info.info = MODE_11G;
+		else {
+			for (i = 0; i < SIR_NUM_11A_RATES; i++) {
+				if (sirIsArate(sta_ds->
+					       supportedRates.llaRates[i]
+					       & 0x7F)) {
+					assoc_ind->chan_info.info = MODE_11G;
+					nw_type_11b = false;
+					break;
+				}
+			}
+			if (nw_type_11b)
+				assoc_ind->chan_info.info = MODE_11B;
+		}
 		return;
 	}
 
@@ -2305,6 +2326,9 @@ void lim_send_mlm_assoc_ind(tpAniSirGlobal mac_ctx,
 		 * processing in hostapd
 		 */
 		if (assoc_req->HTCaps.present) {
+			qdf_mem_copy(&assoc_ind->HTCaps, &assoc_req->HTCaps,
+				     sizeof(tDot11fIEHTCaps));
+
 			rsn_len = assoc_ind->addIE.length;
 			if (assoc_ind->addIE.length + DOT11F_IE_HTCAPS_MIN_LEN
 				+ 2 < SIR_MAC_MAX_IE_LENGTH) {
@@ -2418,8 +2442,10 @@ void lim_send_mlm_assoc_ind(tpAniSirGlobal mac_ctx,
 		fill_mlm_assoc_ind_vht(assoc_req, sta_ds, assoc_ind);
 
 		/* updates VHT information in assoc indication */
+		 qdf_mem_copy(&assoc_ind->VHTCaps, &assoc_req->VHTCaps,
+			      sizeof(tDot11fIEVHTCaps));
 		lim_fill_assoc_ind_vht_info(mac_ctx, session_entry, assoc_req,
-			assoc_ind);
+					    assoc_ind, sta_ds);
 		lim_post_sme_message(mac_ctx, LIM_MLM_ASSOC_IND,
 			 (uint32_t *) assoc_ind);
 		qdf_mem_free(assoc_ind);

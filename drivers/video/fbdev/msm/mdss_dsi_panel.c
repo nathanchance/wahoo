@@ -1018,7 +1018,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
 
 	/* Ensure low persistence mode is set as before */
-	mdss_dsi_panel_apply_display_setting(pdata, pinfo->persist_mode);
+	if (pinfo->persist_mode != MDSS_PANEL_LOW_PERSIST_MODE_OFF)
+		mdss_dsi_panel_apply_display_setting(pdata,
+						     pinfo->persist_mode);
 end:
 	pr_debug("%s:-\n", __func__);
 	return ret;
@@ -1047,8 +1049,10 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 
 	cmds = &ctrl->post_panel_on_cmds;
 	if (cmds->cmd_cnt) {
-		msleep(VSYNC_DELAY);	/* wait for a vsync passed */
-		mdss_dsi_panel_cmds_send(ctrl, cmds, CMD_REQ_COMMIT);
+		u32 flags = CMD_REQ_COMMIT | CMD_REQ_MDP_IDLE;
+
+		/* wait for frame transfer, before sending cmd */
+		mdss_dsi_panel_cmds_send(ctrl, cmds, flags);
 	}
 
 	if (pinfo->is_dba_panel && pinfo->is_pluggable) {

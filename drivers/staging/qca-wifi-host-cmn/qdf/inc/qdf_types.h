@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -35,6 +35,7 @@
 
 /* Include Files */
 #include <i_qdf_types.h>
+#include <qdf_atomic.h>
 
 /* Preprocessor definitions and constants */
 #define QDF_MAX_SGLIST 4
@@ -136,6 +137,9 @@ typedef __qdf_dma_size_t     qdf_dma_size_t;
  */
 typedef __qdf_dma_context_t qdf_dma_context_t;
 
+typedef __qdf_mem_info_t qdf_mem_info_t;
+typedef __sgtable_t sgtable_t;
+
 /**
  * typedef qdf_dma_dir_t - DMA data direction.
  */
@@ -155,6 +159,20 @@ typedef struct qdf_dma_map_info {
 		qdf_dma_size_t len;
 	} dma_segs[QDF_MAX_SCATTER];
 } qdf_dmamap_info_t;
+
+/**
+ * struct qdf_shared_mem - Shared memory resource
+ * @mem_info: memory info struct
+ * @vaddr: virtual address
+ * @sgtable: scatter-gather table
+ * @memctx: dma address
+ */
+typedef struct qdf_shared_mem {
+	qdf_mem_info_t mem_info;
+	void *vaddr;
+	sgtable_t sgtable;
+	qdf_dma_mem_context(memctx);
+} qdf_shared_mem_t;
 
 #define qdf_iomem_t __qdf_iomem_t;
 
@@ -396,15 +414,50 @@ enum tQDF_GLOBAL_CON_MODE {
 void __printf(3, 4) qdf_trace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
 		   char *str_format, ...);
 
+/**
+ * qdf_vtrace_msg() - the va_list version of qdf_trace_msg
+ * @module: the calling module's Id
+ * @level: the logging level to log using
+ * @str_format: the log format string
+ * @val: the va_list containing the values to format according to str_format
+ *
+ * Return: None
+ */
+void qdf_vtrace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
+		    char *str_format, va_list val);
+
 #define qdf_print(args...) \
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR, ## args)
 
+#define qdf_logfl(level, format, args...) \
+	QDF_TRACE(QDF_MODULE_ID_QDF, level, FL(format), ## args)
+
+#define qdf_alert(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_FATAL, format, ## args)
+#define qdf_err(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_ERROR, format, ## args)
+#define qdf_warn(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_WARN, format, ## args)
+#define qdf_info(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_INFO, format, ## args)
+#define qdf_debug(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_DEBUG, format, ## args)
+
 #else
+
 #define qdf_print printk
+#define qdf_alert printk
+#define qdf_err printk
+#define qdf_warn printk
+#define qdf_info printk
+#define qdf_debug printk
+
 #endif /* CONFIG_MCL */
 
 #define qdf_vprint    __qdf_vprint
 #define qdf_snprint   __qdf_snprint
+
+#define qdf_kstrtoint	__qdf_kstrtoint
 
 #ifdef WLAN_OPEN_P2P_INTERFACE
 /* This should match with WLAN_MAX_INTERFACES */
@@ -499,7 +552,7 @@ struct qdf_tso_frag_t {
 };
 
 #define FRAG_NUM_MAX 6
-#define TSO_SEG_MAGIC_COOKIE 0x7EED
+#define TSO_SEG_MAGIC_COOKIE 0x1EED
 
 /**
  * struct qdf_tso_flags_t - TSO specific flags
@@ -579,20 +632,33 @@ enum tsoseg_dbg_caller_e {
 	TSOSEG_LOC_UNDEFINED,
 	TSOSEG_LOC_INIT1,
 	TSOSEG_LOC_INIT2,
+	TSOSEG_LOC_FREE,
+	TSOSEG_LOC_ALLOC,
 	TSOSEG_LOC_DEINIT,
+	TSOSEG_LOC_GETINFO,
+	TSOSEG_LOC_FILLHTTSEG,
+	TSOSEG_LOC_FILLCMNSEG,
 	TSOSEG_LOC_PREPARETSO,
 	TSOSEG_LOC_TXPREPLLFAST,
 	TSOSEG_LOC_UNMAPTSO,
-	TSOSEG_LOC_ALLOC,
-	TSOSEG_LOC_FREE,
+	TSOSEG_LOC_UNMAPLAST,
+	TSOSEG_LOC_FORCE_FREE,
 };
 #ifdef TSOSEG_DEBUG
 
+/**
+ * WARNING: Don't change the history size without changing the wrap
+ *  code in qdf_tso_seg_dbg_record function
+ */
 #define MAX_TSO_SEG_ACT_HISTORY 16
+struct qdf_tso_seg_dbg_history_t {
+	uint64_t ts;
+	short    id;
+};
 struct qdf_tso_seg_dbg_t {
 	void    *txdesc;  /* owner - (ol_txrx_tx_desc_t *) */
-	int      cur;     /* index of last valid entry */
-	uint16_t history[MAX_TSO_SEG_ACT_HISTORY];
+	qdf_atomic_t cur; /* index of last valid entry */
+	struct qdf_tso_seg_dbg_history_t h[MAX_TSO_SEG_ACT_HISTORY];
 };
 #endif /* TSOSEG_DEBUG */
 
@@ -603,8 +669,10 @@ struct qdf_tso_seg_dbg_t {
  */
 struct qdf_tso_seg_elem_t {
 	struct qdf_tso_seg_t seg;
-	uint16_t cookie:15,
-		on_freelist:1;
+	uint32_t cookie:13,
+		on_freelist:1,
+		sent_to_target:1,
+		force_free:1;
 	struct qdf_tso_seg_elem_t *next;
 #ifdef TSOSEG_DEBUG
 	struct qdf_tso_seg_dbg_t dbg;
@@ -683,6 +751,16 @@ struct qdf_tso_info_t {
 enum qdf_suspend_type {
 	QDF_SYSTEM_SUSPEND,
 	QDF_RUNTIME_SUSPEND
+};
+
+/*
+ * Verbosity levels for stats for which want to have differet levels
+ * @QDF_STATS_VERB_LVL_LOW: Stats verbosity level low
+ * @QDF_STATS_VERB_LVL_HIGH: Stats verbosity level high
+ */
+enum qdf_stats_verb_lvl {
+	QDF_STATS_VERB_LVL_LOW,
+	QDF_STATS_VERB_LVL_HIGH
 };
 
 #endif /* __QDF_TYPES_H */

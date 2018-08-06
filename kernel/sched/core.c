@@ -2262,6 +2262,11 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	int cpu = get_cpu();
 
 	__sched_fork(clone_flags, p);
+
+#ifdef CONFIG_CPU_FREQ_STAT
+	cpufreq_task_stats_alloc(p);
+#endif
+
 	/*
 	 * We mark the process as running here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
@@ -3389,12 +3394,12 @@ static void __sched notrace __schedule(bool preempt)
 
 		trace_sched_switch(preempt, prev, next);
 
-		/* Log and trace when scheduling a long-delayed task */
+		/* Log when scheduling a long-delayed task */
 		now = cpu_clock(cpu);
 		prev->waiting_time = now;
 		if (!is_idle_task(next) &&
 		    now > next->waiting_time + NSEC_PER_SEC) {
-			printk("task wait timing: "
+			printk_ratelimited("task wait timing: "
 			       "prev->tgid: %d, prev->pid: %d, "
 			       "prev->prio: %d, prev->vruntime: %llu, "
 			       "next->tgid: %d, next->pid: %d, "

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -197,7 +197,7 @@ typedef struct sLimMlmStartReq {
 	uint8_t ssidHidden;
 	uint8_t wps_state;
 	uint8_t obssProtEnabled;
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 } tLimMlmStartReq, *tpLimMlmStartReq;
 
 typedef struct sLimMlmStartCnf {
@@ -276,6 +276,9 @@ typedef struct sLimMlmAssocInd {
 	uint8_t max_mcs_idx;
 	uint8_t rx_mcs_map;
 	uint8_t tx_mcs_map;
+
+	tDot11fIEHTCaps HTCaps;
+	tDot11fIEVHTCaps VHTCaps;
 } tLimMlmAssocInd, *tpLimMlmAssocInd;
 
 typedef struct sLimMlmReassocReq {
@@ -468,7 +471,50 @@ void lim_send_mlm_assoc_ind(tpAniSirGlobal pMac, tpDphHashNode pStaDs,
 
 void lim_process_assoc_rsp_frame(tpAniSirGlobal, uint8_t *, uint8_t, tpPESession);
 void lim_process_disassoc_frame(tpAniSirGlobal, uint8_t *, tpPESession);
+/*
+ * lim_perform_disassoc() - Actual action taken after receiving disassoc
+ * @mac_ctx: Global MAC context
+ * @frame_rssi: RSSI of the frame
+ * @rc: Reason code of the deauth
+ * @pe_session: PE session entry pointer
+ * @addr: BSSID from which the disassoc is received
+ *
+ * Return: None
+ */
+void lim_perform_disassoc(tpAniSirGlobal mac_ctx, int32_t frame_rssi,
+			  uint16_t rc, tpPESession pe_session,
+			  tSirMacAddr addr);
+/*
+ * lim_disassoc_tdls_peers() - Disassoc action for tdls peers
+ * @mac_ctx: Global MAC context
+ * @pe_session: PE session entry pointer
+ * @addr: BSSID from which the disassoc is received
+ *
+ * Return: None
+ */
+#ifdef FEATURE_WLAN_TDLS
+void lim_disassoc_tdls_peers(tpAniSirGlobal mac_ctx,
+				    tpPESession pe_session, tSirMacAddr addr);
+#else
+void lim_disassoc_tdls_peers(tpAniSirGlobal mac_ctx,
+				    tpPESession pe_session, tSirMacAddr addr)
+{
+	return;
+}
+#endif
 void lim_process_deauth_frame(tpAniSirGlobal, uint8_t *, tpPESession);
+/*
+ * lim_perform_deauth() - Actual action taken after receiving deauth
+ * @mac_ctx: Global MAC context
+ * @pe_session: PE session entry pointer
+ * @rc: Reason code of the deauth
+ * @addr: BSSID from which the deauth is received
+ * @frame_rssi: RSSI of the frame
+ *
+ * Return: None
+ */
+void lim_perform_deauth(tpAniSirGlobal mac_ctx, tpPESession pe_session,
+			uint16_t rc, tSirMacAddr addr, int32_t frame_rssi);
 void lim_process_action_frame(tpAniSirGlobal, uint8_t *, tpPESession);
 void lim_process_action_frame_no_session(tpAniSirGlobal pMac, uint8_t *pRxMetaInfo);
 
@@ -477,7 +523,7 @@ void lim_populate_mac_header(tpAniSirGlobal, uint8_t *, uint8_t, uint8_t,
 				      tSirMacAddr, tSirMacAddr);
 tSirRetStatus lim_send_probe_req_mgmt_frame(tpAniSirGlobal, tSirMacSSid *,
 					    tSirMacAddr, uint8_t, tSirMacAddr,
-					    uint32_t, uint32_t, uint8_t *);
+					    uint32_t, uint16_t *, uint8_t *);
 void lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal, tSirMacAddr, tpAniSSID, short,
 				   uint8_t, tpPESession, uint8_t);
 void lim_send_auth_mgmt_frame(tpAniSirGlobal, tSirMacAuthFrameBody *, tSirMacAddr,
@@ -901,6 +947,16 @@ tSirRetStatus lim_process_sme_del_all_tdls_peers(tpAniSirGlobal p_mac,
 }
 #endif
 
+/**
+ * lim_process_rx_channel_status_event() - processes
+ * event WDA_RX_CHN_STATUS_EVENT
+ * @mac_ctx Pointer to Global MAC structure
+ * @buf: Received message info
+ *
+ * Return: None
+ */
+void lim_process_rx_channel_status_event(tpAniSirGlobal mac_ctx, void *buf);
+
 /* / Bit value data structure */
 typedef enum sHalBitVal         /* For Bit operations */
 {
@@ -913,5 +969,43 @@ enum {
 	ePROT,
 	eDBG
 };
+
+/**
+ * lim_process_join_failure_timeout() - This function is called to process
+ * JoinFailureTimeout
+ *
+ * @mac_ctx: Pointer to Global MAC structure
+ *
+ * This function is called to process JoinFailureTimeout
+ *
+ * @Return None
+ */
+void lim_process_join_failure_timeout(tpAniSirGlobal mac_ctx);
+
+/**
+ * lim_process_auth_failure_timeout() - This function is called to process Min
+ * Channel Timeout during channel scan.
+ *
+ * @mac_ctx: Pointer to Global MAC structure
+ *
+ * This function is called to process Min Channel Timeout during channel scan.
+ *
+ * @Return: None
+ */
+void lim_process_auth_failure_timeout(tpAniSirGlobal mac_ctx);
+
+/**
+ * lim_process_assoc_failure_timeout() - This function is called to process Min
+ * Channel Timeout during channel scan.
+ *
+ * @mac_ctx: Pointer to Global MAC structure
+ * @msg_type: Assoc or reassoc
+ *
+ * This function is called to process Min Channel Timeout during channel scan.
+ *
+ * @Return: None
+ */
+void lim_process_assoc_failure_timeout(tpAniSirGlobal mac_ctx,
+						     uint32_t msg_type);
 
 #endif /* __LIM_TYPES_H */

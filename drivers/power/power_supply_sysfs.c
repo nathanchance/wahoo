@@ -81,7 +81,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Non compliant",
 	};
 	static char *typec_pr_text[] = {
-		"none", "dual power role", "sink", "source"
+		"none", "dual power role", "sink", "source", "source_1_5"
 	};
 	ssize_t ret = 0;
 	struct power_supply *psy = dev_get_drvdata(dev);
@@ -288,13 +288,13 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(parallel_disable),
 	POWER_SUPPLY_ATTR(pe_start),
 	POWER_SUPPLY_ATTR(use_external_vbus_output),
+	POWER_SUPPLY_ATTR(vbus_output_status),
 	POWER_SUPPLY_ATTR(set_ship_mode),
 	POWER_SUPPLY_ATTR(soc_reporting_ready),
 	POWER_SUPPLY_ATTR(debug_battery),
 	POWER_SUPPLY_ATTR(fcc_delta),
 	POWER_SUPPLY_ATTR(icl_reduction),
 	POWER_SUPPLY_ATTR(parallel_mode),
-	POWER_SUPPLY_ATTR(port_temp),
 	POWER_SUPPLY_ATTR(die_health),
 	POWER_SUPPLY_ATTR(connector_health),
 	POWER_SUPPLY_ATTR(ctm_current_max),
