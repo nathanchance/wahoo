@@ -16,13 +16,6 @@
  */
 #define __UNIQUE_ID(prefix) __PASTE(__PASTE(__UNIQUE_ID_, prefix), __COUNTER__)
 
-/*
- * Clang supports FORTIFY_SOURCE; this needs to override compiler-gcc.h turning it off
- */
-#ifdef __NO_FORTIFY
-#undef __NO_FORTIFY
-#endif
-
 #ifdef CONFIG_CC_LTO
 #ifdef CONFIG_FTRACE_MCOUNT_RECORD
 #define __norecordmcount \

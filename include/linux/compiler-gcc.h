@@ -331,12 +331,3 @@
 #else
 #define __diag_GCC_8(s)
 #endif
-
-/*
- * Show that FORTIFY_SOURCE is not supported by GCC 4.9.4 and earlier
- */
-#if GCC_VERSION <= 40904
-#ifndef __NO_FORTIFY
-#define __NO_FORTIFY 1
-#endif
-#endif
