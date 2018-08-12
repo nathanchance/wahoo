@@ -1599,7 +1599,7 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	ret = device_add(&pd->dev);
 	if (ret < 0)
-		goto free_name;
+		goto free_pd;
 
 	ret = pd_engine_debugfs_init(pd);
 	if (ret < 0)
@@ -1679,8 +1679,6 @@ del_wq:
 	destroy_workqueue(pd->wq);
 exit_debugfs:
 	pd_engine_debugfs_exit(pd);
-free_name:
-	kfree_const(pd->dev.kobj.name);
 del_pd:
 	device_del(&pd->dev);
 free_pd:
@@ -1705,7 +1703,6 @@ void usbpd_destroy(struct usbpd *pd)
 	power_supply_put(pd->usb_psy);
 	destroy_workqueue(pd->wq);
 	pd_engine_debugfs_exit(pd);
-	kfree_const(pd->dev.kobj.name);
 	device_del(&pd->dev);
 	num_pd_instances--;
 	kfree(pd);
