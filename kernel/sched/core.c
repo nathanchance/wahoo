@@ -883,11 +883,6 @@ void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 	dequeue_task(rq, p, flags);
 }
 
-static inline bool nontask_capacity(void)
-{
-	return sched_feat(NONTASK_CAPACITY);
-}
-
 static void update_rq_clock_task(struct rq *rq, s64 delta)
 {
 /*
@@ -937,7 +932,7 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 	rq->clock_task += delta;
 
 #if defined(CONFIG_IRQ_TIME_ACCOUNTING) || defined(CONFIG_PARAVIRT_TIME_ACCOUNTING)
-	if ((irq_delta + steal) && nontask_capacity())
+	if ((irq_delta + steal) && sched_feat(NONTASK_CAPACITY))
 		sched_rt_avg_update(rq, irq_delta + steal);
 #endif
 }
