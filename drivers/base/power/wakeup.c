@@ -6,6 +6,10 @@
  * This file is released under the GPLv2.
  */
 
+#if defined(CONFIG_ANDROID) && !defined(CONFIG_DEBUG_FS)
+#define CONFIG_DEBUG_FS
+#endif
+
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
@@ -1172,38 +1176,10 @@ static const struct file_operations wakeup_sources_stats_fops = {
 	.release = single_release,
 };
 
-#ifndef CONFIG_DEBUG_FS
-static const struct kernfs_ops wakeup_sources_kern_fops = {
-	.seq_show = wakeup_sources_stats_show,
-};
-#endif
-
 static int __init wakeup_sources_debugfs_init(void)
 {
-#ifndef CONFIG_DEBUG_FS
-	struct kobject *kobj;
-	struct kernfs_node *node;
-#endif
-
 	wakeup_sources_stats_dentry = debugfs_create_file("wakeup_sources",
 			S_IRUGO, NULL, NULL, &wakeup_sources_stats_fops);
-#ifndef CONFIG_DEBUG_FS
-	if (wakeup_sources_stats_dentry != ERR_PTR(-ENODEV))
-		return 0;
-
-	/* Create debugfs from scratch just for wakeup_sources */
-	kobj = kobject_create_and_add("debug", kernel_kobj);
-	if (!kobj)
-		return -ENOMEM;
-
-	node = kernfs_create_file(kobj->sd, "wakeup_sources",
-			S_IRUGO, 0, &wakeup_sources_kern_fops, NULL);
-	if (IS_ERR(node)) {
-		kobject_put(kobj);
-		return PTR_ERR(node);
-	}
-#endif
-
 	return 0;
 }
 
