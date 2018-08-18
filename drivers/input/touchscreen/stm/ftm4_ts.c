@@ -2571,10 +2571,13 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 
 	if (ev && ev->data) {
 		int *blank = (int *)ev->data;
-		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK)
+		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK) {
+			cancel_work_sync(&info->resume_work);
 			schedule_work(&info->suspend_work);
-		else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
+		} else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK) {
+			cancel_work_sync(&info->suspend_work);
 			schedule_work(&info->resume_work);
+		}
 	}
 
 	return 0;

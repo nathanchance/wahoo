@@ -513,6 +513,7 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 	if (ev && ev->data && event == FB_EVENT_BLANK) {
 		int *blank = (int *)ev->data;
 
+		cancel_work_sync(&ts->pm_work);
 		ts->screen_off = *blank != FB_BLANK_UNBLANK;
 		schedule_work(&ts->pm_work);
 	}

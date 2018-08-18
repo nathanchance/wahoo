@@ -6148,12 +6148,18 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		     *transition == FB_BLANK_NORMAL ||
 		     *transition == FB_BLANK_VSYNC_SUSPEND) &&
 		    rmi4_data->fb_ready) {
+			bool run_work = !cancel_work_sync(&rmi4_data->pm_work);
+
 			rmi4_data->fb_ready = false;
-			schedule_work(&rmi4_data->pm_work);
+			if (run_work)
+				schedule_work(&rmi4_data->pm_work);
 		} else if (*transition == FB_BLANK_UNBLANK &&
 			   !rmi4_data->fb_ready) {
+			bool run_work = !cancel_work_sync(&rmi4_data->pm_work);
+
 			rmi4_data->fb_ready = true;
-			schedule_work(&rmi4_data->pm_work);
+			if (run_work)
+				schedule_work(&rmi4_data->pm_work);
 		}
 	}
 
