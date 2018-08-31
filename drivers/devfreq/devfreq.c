@@ -25,7 +25,6 @@
 #include <linux/list.h>
 #include <linux/printk.h>
 #include <linux/hrtimer.h>
-#include <linux/fb.h>
 #include "governor.h"
 
 static struct class *devfreq_class;
@@ -42,15 +41,6 @@ static LIST_HEAD(devfreq_governor_list);
 /* The list of all device-devfreq */
 static LIST_HEAD(devfreq_list);
 static DEFINE_MUTEX(devfreq_list_lock);
-
-/* List of devices to boost when the screen is woken */
-static const char *boost_devices[] = {
-	"soc:qcom,cpubw",
-};
-
-#define WAKE_BOOST_DURATION_MS (3000)
-static struct delayed_work wake_unboost_work;
-static struct work_struct wake_boost_work;
 
 /**
  * find_device_devfreq() - find devfreq struct using device pointer
@@ -209,11 +199,11 @@ int update_devfreq(struct devfreq *devfreq)
 	if (!devfreq->governor)
 		return -EINVAL;
 
-	/* Reevaluate the proper frequency */
-	if (devfreq->do_wake_boost) {
-		/* Use the max freq when the screen is turned on */
-		freq = UINT_MAX;
+	if (devfreq->max_boost) {
+		/* Use the max freq for max boosts */
+		freq = ULONG_MAX;
 	} else {
+		/* Reevaluate the proper frequency */
 		err = devfreq->governor->get_target_freq(devfreq, &freq, &flags);
 		if (err)
 			return err;
@@ -486,7 +476,7 @@ struct devfreq *devfreq_add_device(struct device *dev,
 {
 	struct devfreq *devfreq;
 	struct devfreq_governor *governor;
-	int i, err = 0;
+	int err = 0;
 
 	if (!dev || !profile || !governor_name) {
 		dev_err(dev, "%s: Invalid parameters.\n", __func__);
@@ -556,13 +546,6 @@ struct devfreq *devfreq_add_device(struct device *dev,
 		goto err_init;
 	}
 	mutex_unlock(&devfreq_list_lock);
-
-	for (i = 0; i < ARRAY_SIZE(boost_devices); i++) {
-		if (!strcmp(dev_name(dev), boost_devices[i])) {
-			devfreq->needs_wake_boost = true;
-			break;
-		}
-	}
 
 	return devfreq;
 
@@ -963,6 +946,10 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 	unsigned long max;
 
+	/* Minfreq is managed by devfreq_boost */
+	if (df->is_boost_device)
+		return count;
+
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
@@ -1118,63 +1105,6 @@ static struct attribute *devfreq_attrs[] = {
 };
 ATTRIBUTE_GROUPS(devfreq);
 
-static void set_wake_boost(bool enable)
-{
-	struct devfreq *df;
-
-	mutex_lock(&devfreq_list_lock);
-	list_for_each_entry(df, &devfreq_list, node) {
-		if (!df->needs_wake_boost)
-			continue;
-
-		mutex_lock(&df->lock);
-		df->do_wake_boost = enable;
-		update_devfreq(df);
-		mutex_unlock(&df->lock);
-	}
-	mutex_unlock(&devfreq_list_lock);
-}
-
-static void wake_boost_fn(struct work_struct *work)
-{
-	set_wake_boost(true);
-	schedule_delayed_work(&wake_unboost_work,
-			msecs_to_jiffies(WAKE_BOOST_DURATION_MS));
-}
-
-static void wake_unboost_fn(struct work_struct *work)
-{
-	set_wake_boost(false);
-}
-
-static int fb_notifier_callback(struct notifier_block *nb,
-		unsigned long action, void *data)
-{
-	struct fb_event *evdata = data;
-	int *blank = evdata->data;
-
-	/* Parse framebuffer events as soon as they occur */
-	if (action != FB_EARLY_EVENT_BLANK)
-		return NOTIFY_OK;
-
-	switch (*blank) {
-	case FB_BLANK_UNBLANK:
-		schedule_work(&wake_boost_work);
-		break;
-	default:
-		cancel_work_sync(&wake_boost_work);
-		if (cancel_delayed_work_sync(&wake_unboost_work))
-			set_wake_boost(false);
-	}
-
-	return NOTIFY_OK;
-}
-
-static struct notifier_block fb_notifier_callback_nb = {
-	.notifier_call = fb_notifier_callback,
-	.priority = INT_MAX,
-};
-
 static int __init devfreq_init(void)
 {
 	devfreq_class = class_create(THIS_MODULE, "devfreq");
@@ -1190,10 +1120,6 @@ static int __init devfreq_init(void)
 		return -ENOMEM;
 	}
 	devfreq_class->dev_groups = devfreq_groups;
-
-	INIT_WORK(&wake_boost_work, wake_boost_fn);
-	INIT_DELAYED_WORK(&wake_unboost_work, wake_unboost_fn);
-	fb_register_client(&fb_notifier_callback_nb);
 
 	return 0;
 }
