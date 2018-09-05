@@ -1715,8 +1715,12 @@ static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state)
 	 * Hence don't disable it if force clock ON is set.
 	 */
 	if (test_bit(KGSL_PWRFLAGS_POWER_ON, &pwr->ctrl_flags) ||
-		test_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->ctrl_flags))
+		test_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->ctrl_flags)) {
+		KGSL_PWR_WARN(device,
+			"Force power or clock on had been set: ctrl_flags=0x%lx\n",
+			pwr->ctrl_flags);
 		return 0;
+	}
 
 	if (state == KGSL_PWRFLAGS_OFF) {
 		if (test_and_clear_bit(KGSL_PWRFLAGS_POWER_ON,
