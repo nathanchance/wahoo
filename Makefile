@@ -638,7 +638,6 @@ ARCH_CFLAGS :=
 include arch/$(SRCARCH)/Makefile
 
 KBUILD_CFLAGS	+= $(call cc-option,-fno-delete-null-pointer-checks,)
-KBUILD_CFLAGS	+= $(call cc-disable-warning,maybe-uninitialized,)
 KBUILD_CFLAGS	+= $(call cc-disable-warning,frame-address,)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, format-truncation)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, format-overflow)
@@ -661,6 +660,12 @@ endif
 
 ifdef CONFIG_CC_WERROR
 KBUILD_CFLAGS	+= -Werror
+endif
+
+# Clang poses as GCC 4.2.1 but we want this warning enabled
+ifeq ($(cc-name),gcc)
+KBUILD_CFLAGS	+= $(call cc-ifversion, -le, 0409, \
+			$(call cc-disable-warning,maybe-uninitialized,))
 endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
