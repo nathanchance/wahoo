@@ -48,7 +48,6 @@
 #define STM_RSP_SUPPORTED_INDEX		7
 #define STM_RSP_STATUS_INDEX		8
 #define STM_RSP_NUM_BYTES		9
-#define RETRY_MAX_COUNT		1000
 
 static int timestamp_switch;
 module_param(timestamp_switch, int, 0644);
@@ -227,7 +226,6 @@ void chk_logging_wakeup(void)
 			 * situation.
 			 */
 			driver->data_ready[i] |= USER_SPACE_DATA_TYPE;
-			atomic_inc(&driver->data_ready_notif[i]);
 			pr_debug("diag: Force wakeup of logging process\n");
 			wake_up_interruptible(&driver->wait_q);
 			break;
@@ -268,22 +266,28 @@ static void pack_rsp_and_send(unsigned char *buf, int len,
 				diag_md_session_get_peripheral(APPS_DATA);
 
 	if (info && info->peripheral_mask) {
-		for (i = 0; i < NUM_MD_SESSIONS; i++) {
-			if (info->peripheral_mask & (1 << i))
-				break;
+		if (info->peripheral_mask == DIAG_CON_ALL ||
+			(info->peripheral_mask & (1 << APPS_DATA)) ||
+			(info->peripheral_mask & (1 << PERIPHERAL_MODEM))) {
+			rsp_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+		} else {
+			for (i = 0; i <= NUM_PERIPHERALS; i++) {
+				if (info->peripheral_mask & (1 << i))
+					break;
+			}
+			rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
 		}
-		rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, TYPE_CMD);
 	} else
 		rsp_ctxt = driver->rsp_buf_ctxt;
 	mutex_unlock(&driver->md_session_lock);
 
 	/*
 	 * Keep trying till we get the buffer back. It should probably
-	 * take one or two iterations. When this loops till RETRY_MAX_COUNT, it
+	 * take one or two iterations. When this loops till UINT_MAX, it
 	 * means we did not get a write complete for the previous
 	 * response.
 	 */
-	while (retry_count < RETRY_MAX_COUNT) {
+	while (retry_count < UINT_MAX) {
 		if (!driver->rsp_buf_busy)
 			break;
 		/*
@@ -356,21 +360,27 @@ static void encode_rsp_and_send(unsigned char *buf, int len,
 				diag_md_session_get_peripheral(APPS_DATA);
 
 	if (info && info->peripheral_mask) {
-		for (i = 0; i < NUM_MD_SESSIONS; i++) {
-			if (info->peripheral_mask & (1 << i))
-				break;
+		if (info->peripheral_mask == DIAG_CON_ALL ||
+			(info->peripheral_mask & (1 << APPS_DATA)) ||
+			(info->peripheral_mask & (1 << PERIPHERAL_MODEM))) {
+			rsp_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+		} else {
+			for (i = 0; i <= NUM_PERIPHERALS; i++) {
+				if (info->peripheral_mask & (1 << i))
+					break;
+			}
+			rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
 		}
-		rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, TYPE_CMD);
 	} else
 		rsp_ctxt = driver->rsp_buf_ctxt;
 	mutex_unlock(&driver->md_session_lock);
 	/*
 	 * Keep trying till we get the buffer back. It should probably
-	 * take one or two iterations. When this loops till RETRY_MAX_COUNT, it
+	 * take one or two iterations. When this loops till UINT_MAX, it
 	 * means we did not get a write complete for the previous
 	 * response.
 	 */
-	while (retry_count < RETRY_MAX_COUNT) {
+	while (retry_count < UINT_MAX) {
 		if (!driver->rsp_buf_busy)
 			break;
 		/*
@@ -490,10 +500,8 @@ void diag_update_userspace_clients(unsigned int type)
 
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
-		if (driver->client_map[i].pid != 0) {
+		if (driver->client_map[i].pid != 0)
 			driver->data_ready[i] |= type;
-			atomic_inc(&driver->data_ready_notif[i]);
-		}
 	wake_up_interruptible(&driver->wait_q);
 	mutex_unlock(&driver->diagchar_mutex);
 }
@@ -511,8 +519,6 @@ void diag_update_md_clients(unsigned int type)
 					driver->client_map[j].pid ==
 					driver->md_session_map[i]->pid) {
 					driver->data_ready[j] |= type;
-					atomic_inc(
-						&driver->data_ready_notif[j]);
 					break;
 				}
 			}
@@ -529,7 +535,6 @@ void diag_update_sleeping_process(int process_id, int data_type)
 	for (i = 0; i < driver->num_clients; i++)
 		if (driver->client_map[i].pid == process_id) {
 			driver->data_ready[i] |= data_type;
-			atomic_inc(&driver->data_ready_notif[i]);
 			break;
 		}
 	wake_up_interruptible(&driver->wait_q);
@@ -1612,18 +1617,11 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 		}
 		break;
 	case TYPE_CMD:
-		if (peripheral >= 0 && peripheral < NUM_PERIPHERALS &&
-			num != TYPE_CMD) {
-			DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-			"Marking buffer as free after write done p: %d, t: %d, buf_num: %d\n",
-			peripheral, type, num);
+		if (peripheral >= 0 && peripheral < NUM_PERIPHERALS) {
 			diagfwd_write_done(peripheral, type, num);
-		} else if (peripheral == APPS_DATA ||
-			(peripheral >= 0 && peripheral < NUM_PERIPHERALS &&
-			num == TYPE_CMD)) {
-			DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-			"Marking APPS response buffer free after write done for p: %d, t: %d, buf_num: %d\n",
-			peripheral, type, num);
+		}
+		if (peripheral == APPS_DATA ||
+				ctxt == DIAG_MEMORY_DEVICE_MODE) {
 			spin_lock_irqsave(&driver->rsp_buf_busy_lock, flags);
 			driver->rsp_buf_busy = 0;
 			driver->encoded_rsp_len = 0;
@@ -1730,8 +1728,6 @@ int diagfwd_init(void)
 							, GFP_KERNEL)) == NULL)
 		goto err;
 	kmemleak_not_leak(driver->data_ready);
-	for (i = 0; i < THRESHOLD_CLIENT_LIMIT; i++)
-		atomic_set(&driver->data_ready_notif[i], 0);
 	if (driver->apps_req_buf == NULL) {
 		driver->apps_req_buf = kzalloc(DIAG_MAX_REQ_SIZE, GFP_KERNEL);
 		if (!driver->apps_req_buf)

@@ -710,7 +710,6 @@ void diagfwd_peripheral_exit(void)
 	uint8_t peripheral;
 	uint8_t type;
 	struct diagfwd_info *fwd_info = NULL;
-	int transport = 0;
 
 	diag_smd_exit();
 	diag_socket_exit();
@@ -733,10 +732,7 @@ void diagfwd_peripheral_exit(void)
 		driver->diagfwd_dci_cmd[peripheral] = NULL;
 	}
 
-	for (transport = 0; transport < NUM_TRANSPORT; transport++) {
-		kfree(early_init_info[transport]);
-		early_init_info[transport] = NULL;
-	}
+	kfree(early_init_info);
 }
 
 int diagfwd_cntl_register(uint8_t transport, uint8_t peripheral, void *ctxt,
@@ -997,21 +993,6 @@ static void __diag_fwd_open(struct diagfwd_info *fwd_info)
 	if (!fwd_info->inited)
 		return;
 
-	/*
-	 * Logging mode here is reflecting previous mode
-	 * status and will be updated to new mode later.
-	 *
-	 * Keeping the buffers busy for Memory Device Mode.
-	 */
-
-	if ((driver->logging_mode != DIAG_USB_MODE) ||
-		driver->usb_connected) {
-		if (fwd_info->buf_1)
-			atomic_set(&fwd_info->buf_1->in_busy, 0);
-		if (fwd_info->buf_2)
-			atomic_set(&fwd_info->buf_2->in_busy, 0);
-	}
-
 	if (fwd_info->p_ops && fwd_info->p_ops->open)
 		fwd_info->p_ops->open(fwd_info->ctxt);
 
@@ -1182,13 +1163,11 @@ void diagfwd_write_done(uint8_t peripheral, uint8_t type, int ctxt)
 		return;
 
 	fwd_info = &peripheral_info[type][peripheral];
-	if (ctxt == 1 && fwd_info->buf_1) {
+	if (ctxt == 1 && fwd_info->buf_1)
 		atomic_set(&fwd_info->buf_1->in_busy, 0);
-		driver->cpd_len_1 = 0;
-	} else if (ctxt == 2 && fwd_info->buf_2) {
+	else if (ctxt == 2 && fwd_info->buf_2)
 		atomic_set(&fwd_info->buf_2->in_busy, 0);
-		driver->cpd_len_2 = 0;
-	} else if (ctxt == 3 && fwd_info->buf_upd_1_a) {
+	else if (ctxt == 3 && fwd_info->buf_upd_1_a) {
 		atomic_set(&fwd_info->buf_upd_1_a->in_busy, 0);
 		if (driver->cpd_len_1 == 0)
 			atomic_set(&fwd_info->buf_1->in_busy, 0);
