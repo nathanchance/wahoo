@@ -220,8 +220,8 @@ static int create_lvl_avail_nodes(const char *name,
 		goto failed;
 	}
 
-	attr = devm_kcalloc(&lpm_pdev->dev,
-		LPM_TYPE_NR + 1, sizeof(*attr), GFP_KERNEL);
+	attr = devm_kzalloc(&lpm_pdev->dev,
+		sizeof(*attr) * (LPM_TYPE_NR + 1), GFP_KERNEL);
 	if (!attr) {
 		ret = -ENOMEM;
 		goto failed;
@@ -273,10 +273,8 @@ static int create_cpu_lvl_nodes(struct lpm_cluster *p, struct kobject *parent)
 	char cpu_name[20] = {0};
 	int ret = 0;
 
-	cpu_kobj = devm_kcalloc(&lpm_pdev->dev,
-				cpumask_weight(&p->child_cpus),
-				sizeof(*cpu_kobj),
-				GFP_KERNEL);
+	cpu_kobj = devm_kzalloc(&lpm_pdev->dev, sizeof(*cpu_kobj) *
+			cpumask_weight(&p->child_cpus), GFP_KERNEL);
 	if (!cpu_kobj)
 		return -ENOMEM;
 
@@ -289,8 +287,8 @@ static int create_cpu_lvl_nodes(struct lpm_cluster *p, struct kobject *parent)
 			goto release_kobj;
 		}
 
-		level_list = devm_kcalloc(&lpm_pdev->dev,
-				p->cpu->nlevels, sizeof(*level_list),
+		level_list = devm_kzalloc(&lpm_pdev->dev,
+				p->cpu->nlevels * sizeof(*level_list),
 				GFP_KERNEL);
 		if (!level_list) {
 			ret = -ENOMEM;
@@ -408,10 +406,10 @@ static int parse_legacy_cluster_params(struct device_node *node,
 		return 0;
 	}
 
-	c->name = devm_kcalloc(&lpm_pdev->dev, c->ndevices, sizeof(*c->name),
+	c->name = devm_kzalloc(&lpm_pdev->dev, c->ndevices * sizeof(*c->name),
 				GFP_KERNEL);
-	c->lpm_dev = devm_kcalloc(&lpm_pdev->dev,
-				c->ndevices, sizeof(*c->lpm_dev),
+	c->lpm_dev = devm_kzalloc(&lpm_pdev->dev,
+				c->ndevices * sizeof(*c->lpm_dev),
 				GFP_KERNEL);
 	if (!c->name || !c->lpm_dev) {
 		ret = -ENOMEM;
@@ -571,8 +569,8 @@ static int parse_cluster_level(struct device_node *node,
 	} else if (!cluster->no_saw_devices) {
 		key  = "no saw-devices";
 
-		level->mode = devm_kcalloc(&lpm_pdev->dev,
-				cluster->ndevices, sizeof(*level->mode),
+		level->mode = devm_kzalloc(&lpm_pdev->dev,
+				cluster->ndevices * sizeof(*level->mode),
 				GFP_KERNEL);
 		if (!level->mode) {
 			pr_err("Memory allocation failed\n");
@@ -922,15 +920,15 @@ struct lpm_cluster *parse_cluster(struct device_node *node,
 			c->aff_level = 1;
 
 			for_each_cpu(i, &c->child_cpus) {
-				per_cpu(max_residency, i) = devm_kcalloc(
+				per_cpu(max_residency, i) = devm_kzalloc(
 					&lpm_pdev->dev,
-					c->cpu->nlevels, sizeof(uint32_t),
+					sizeof(uint32_t) * c->cpu->nlevels,
 					GFP_KERNEL);
 				if (!per_cpu(max_residency, i))
 					return ERR_PTR(-ENOMEM);
-				per_cpu(min_residency, i) = devm_kcalloc(
+				per_cpu(min_residency, i) = devm_kzalloc(
 					&lpm_pdev->dev,
-					c->cpu->nlevels, sizeof(uint32_t),
+					sizeof(uint32_t) * c->cpu->nlevels,
 					GFP_KERNEL);
 				if (!per_cpu(min_residency, i))
 					return ERR_PTR(-ENOMEM);

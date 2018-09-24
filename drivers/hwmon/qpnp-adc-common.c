@@ -2122,10 +2122,10 @@ int32_t qpnp_adc_get_devicetree_data(struct platform_device *pdev,
 							"goog,custom-map");
 			if (custom_map_size > 0 && custom_map_size % 2 == 0) {
 				custom_map_size /= 2;
-				custom_map = devm_kcalloc(
+				custom_map = devm_kzalloc(
 						&pdev->dev,
-						custom_map_size,
-						sizeof(struct qpnp_vadc_map_pt),
+						sizeof(struct qpnp_vadc_map_pt)
+							* custom_map_size,
 						GFP_KERNEL);
 				if (!custom_map)
 					return -ENOMEM;

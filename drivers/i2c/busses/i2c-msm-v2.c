@@ -1203,7 +1203,7 @@ static int i2c_msm_dma_xfer_process(struct i2c_msm_ctrl *ctrl)
 		return ret;
 	}
 
-	sg_tx = kcalloc(tx->desc_cnt_cur, sizeof(struct scatterlist),
+	sg_tx = kzalloc(sizeof(struct scatterlist) * tx->desc_cnt_cur,
 								GFP_KERNEL);
 	if (!sg_tx) {
 		ret = -ENOMEM;
@@ -1212,7 +1212,7 @@ static int i2c_msm_dma_xfer_process(struct i2c_msm_ctrl *ctrl)
 	sg_init_table(sg_tx, tx->desc_cnt_cur);
 	sg_tx_itr = sg_tx;
 
-	sg_rx = kcalloc(rx->desc_cnt_cur, sizeof(struct scatterlist),
+	sg_rx = kzalloc(sizeof(struct scatterlist) * rx->desc_cnt_cur,
 								GFP_KERNEL);
 	if (!sg_rx) {
 		ret = -ENOMEM;
@@ -1589,14 +1589,14 @@ static int i2c_msm_clk_path_init_structs(struct i2c_msm_ctrl *ctrl)
 
 	i2c_msm_dbg(ctrl, MSM_PROF, "initializes path clock voting structs");
 
-	paths = devm_kcalloc(ctrl->dev, 2, sizeof(*paths), GFP_KERNEL);
+	paths = devm_kzalloc(ctrl->dev, sizeof(*paths) * 2, GFP_KERNEL);
 	if (!paths) {
 		dev_err(ctrl->dev,
 			"error msm_bus_paths.paths memory allocation failed\n");
 		return -ENOMEM;
 	}
 
-	usecases = devm_kcalloc(ctrl->dev, 2, sizeof(*usecases), GFP_KERNEL);
+	usecases = devm_kzalloc(ctrl->dev, sizeof(*usecases) * 2, GFP_KERNEL);
 	if (!usecases) {
 		dev_err(ctrl->dev,
 		"error  msm_bus_scale_pdata.usecases memory allocation failed\n");

@@ -437,7 +437,7 @@ static int32_t msm_sensor_get_pw_settings_compat(
 {
 	int32_t rc = 0, i = 0;
 	struct msm_sensor_power_setting32 *ps32 =
-		kcalloc(size, sizeof(*ps32), GFP_KERNEL);
+		kzalloc(sizeof(*ps32) * size, GFP_KERNEL);
 
 	if (!ps32) {
 		pr_err("failed: no memory ps32");
@@ -515,7 +515,7 @@ static int32_t msm_sensor_get_power_down_settings(void *setting,
 		return -EINVAL;
 	}
 	/* Allocate memory for power down setting */
-	pd = kcalloc(size_down, sizeof(*pd), GFP_KERNEL);
+	pd = kzalloc(sizeof(*pd) * size_down, GFP_KERNEL);
 	if (!pd)
 		return -EFAULT;
 
@@ -580,7 +580,7 @@ static int32_t msm_sensor_get_power_up_settings(void *setting,
 	}
 
 	/* Allocate memory for power up setting */
-	pu = kcalloc(size, sizeof(*pu), GFP_KERNEL);
+	pu = kzalloc(sizeof(*pu) * size, GFP_KERNEL);
 	if (!pu)
 		return -ENOMEM;
 

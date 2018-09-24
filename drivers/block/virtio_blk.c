@@ -393,21 +393,21 @@ static int init_vq(struct virtio_blk *vblk)
 	if (err)
 		num_vqs = 1;
 
-	vblk->vqs = kmalloc_array(num_vqs, sizeof(*vblk->vqs), GFP_KERNEL);
+	vblk->vqs = kmalloc(sizeof(*vblk->vqs) * num_vqs, GFP_KERNEL);
 	if (!vblk->vqs) {
 		err = -ENOMEM;
 		goto out;
 	}
 
-	names = kmalloc_array(num_vqs, sizeof(*names), GFP_KERNEL);
+	names = kmalloc(sizeof(*names) * num_vqs, GFP_KERNEL);
 	if (!names)
 		goto err_names;
 
-	callbacks = kmalloc_array(num_vqs, sizeof(*callbacks), GFP_KERNEL);
+	callbacks = kmalloc(sizeof(*callbacks) * num_vqs, GFP_KERNEL);
 	if (!callbacks)
 		goto err_callbacks;
 
-	vqs = kmalloc_array(num_vqs, sizeof(*vqs), GFP_KERNEL);
+	vqs = kmalloc(sizeof(*vqs) * num_vqs, GFP_KERNEL);
 	if (!vqs)
 		goto err_vqs;
 

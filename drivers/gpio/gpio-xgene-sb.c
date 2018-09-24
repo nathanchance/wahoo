@@ -111,7 +111,7 @@ static int xgene_gpio_sb_probe(struct platform_device *pdev)
 
 	priv->nirq = XGENE_MAX_GPIO_DS_IRQ;
 
-	priv->irq = devm_kcalloc(&pdev->dev, XGENE_MAX_GPIO_DS, sizeof(u32),
+	priv->irq = devm_kzalloc(&pdev->dev, sizeof(u32) * XGENE_MAX_GPIO_DS,
 				   GFP_KERNEL);
 	if (!priv->irq)
 		return -ENOMEM;

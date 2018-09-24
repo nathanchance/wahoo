@@ -3659,11 +3659,9 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	if (rmi4_data->report_data != NULL)
 		kfree(rmi4_data->report_data);
 	rmi4_data->temp_report_data =
-			kzalloc(array3_size(4, rmi4_data->num_of_tx, rmi4_data->num_of_rx),
-				GFP_KERNEL);
+			kzalloc(4 * rmi4_data->num_of_tx * rmi4_data->num_of_rx, GFP_KERNEL);
 	rmi4_data->report_data =
-			kzalloc(array3_size(4, rmi4_data->num_of_tx, rmi4_data->num_of_rx),
-				GFP_KERNEL);
+			kzalloc(4 * rmi4_data->num_of_tx * rmi4_data->num_of_rx, GFP_KERNEL);
 	if(rmi4_data->temp_report_data == NULL || rmi4_data->report_data == NULL) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s report data init fail\n",
@@ -3719,7 +3717,7 @@ static int synaptics_rmi4_f1a_alloc_mem(struct synaptics_rmi4_data *rmi4_data,
 
 	f1a->max_count = f1a->button_query.max_button_count + 1;
 
-	f1a->button_control.txrx_map = kcalloc(f1a->max_count, 2, GFP_KERNEL);
+	f1a->button_control.txrx_map = kzalloc(f1a->max_count * 2, GFP_KERNEL);
 	if (!f1a->button_control.txrx_map) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for tx rx mapping\n",
@@ -4056,9 +4054,7 @@ static int synaptics_rmi4_f54_init(struct synaptics_rmi4_data *rmi4_data,
 	if (rmi4_data->report_data_32 != NULL)
 		kfree(rmi4_data->report_data_32);
 	rmi4_data->report_data_32 =
-			kcalloc(4,
-				(rmi4_data->num_of_tx + rmi4_data->num_of_rx),
-				GFP_KERNEL);
+			kzalloc(4 * (rmi4_data->num_of_tx + rmi4_data->num_of_rx), GFP_KERNEL);
 	if(rmi4_data->report_data_32 == NULL) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s report data 32 init fail\n",

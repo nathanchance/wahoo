@@ -835,15 +835,15 @@ static int fts_init(struct fts_ts_info *info)
 			return rc;
 		}
 		info->pFrame =
-			kzalloc(array3_size(info->SenseChannelLength, info->ForceChannelLength, 2),
+			kzalloc(info->SenseChannelLength * info->ForceChannelLength * 2,
 				GFP_KERNEL);
 		if (info->pFrame == NULL) {
 			tsp_debug_err(&info->client->dev,
 						"FTS pFrame kzalloc Failed\n");
 			return -ENOMEM;
 		}
-		info->cx_data = kcalloc(info->SenseChannelLength,
-					info->ForceChannelLength, GFP_KERNEL);
+		info->cx_data = kzalloc(info->SenseChannelLength *
+						info->ForceChannelLength, GFP_KERNEL);
 		if (!info->cx_data)
 			tsp_debug_err(&info->client->dev,
 					"%s: cx_data kzalloc Failed\n", __func__);

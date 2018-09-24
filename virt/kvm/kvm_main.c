@@ -2870,7 +2870,7 @@ static long kvm_vm_ioctl(struct file *filp,
 		if (routing.flags)
 			goto out;
 		r = -ENOMEM;
-		entries = vmalloc(array_size(sizeof(*entries), routing.nr));
+		entries = vmalloc(routing.nr * sizeof(*entries));
 		if (!entries)
 			goto out;
 		r = -EFAULT;

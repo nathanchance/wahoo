@@ -1295,8 +1295,7 @@ static int fw_parse_data(struct tas2557_priv *pTAS2557, struct TFirmware *pFirmw
 	pData += 2;
 
 	pImageData->mpBlocks =
-		kcalloc(pImageData->mnBlocks, sizeof(struct TBlock),
-			GFP_KERNEL);
+		kzalloc(sizeof(struct TBlock) * pImageData->mnBlocks, GFP_KERNEL);
 
 	if (!pImageData->mpBlocks) {
 		dev_err(pTAS2557->dev, "%s:mpBlocks failed to allocate memory\n", __func__);
@@ -1383,8 +1382,7 @@ static int fw_parse_program_data(struct tas2557_priv *pTAS2557,
 		goto end;
 
 	pFirmware->mpPrograms =
-		kcalloc(pFirmware->mnPrograms, sizeof(struct TProgram),
-			GFP_KERNEL);
+		kzalloc(sizeof(struct TProgram) * pFirmware->mnPrograms, GFP_KERNEL);
 
 	if (!pFirmware->mpPrograms) {
 		dev_err(pTAS2557->dev, "%s:mpPrograms failed to allocate memroy\n", __func__);
@@ -1441,9 +1439,8 @@ static int fw_parse_configuration_data(struct tas2557_priv *pTAS2557,
 		goto end;
 
 	pFirmware->mpConfigurations =
-		kcalloc(pFirmware->mnConfigurations,
-			sizeof(struct TConfiguration),
-			GFP_KERNEL);
+		kzalloc(sizeof(struct TConfiguration) * pFirmware->mnConfigurations,
+		GFP_KERNEL);
 
 	if (!pFirmware->mpConfigurations) {
 		dev_err(pTAS2557->dev, "%s:mpConfigurations failed to allocate memroy\n", __func__);
@@ -1513,9 +1510,7 @@ int fw_parse_calibration_data(struct tas2557_priv *pTAS2557,
 		goto end;
 
 	pFirmware->mpCalibrations =
-		kcalloc(pFirmware->mnCalibrations,
-			sizeof(struct TCalibration),
-			GFP_KERNEL);
+		kzalloc(sizeof(struct TCalibration) * pFirmware->mnCalibrations, GFP_KERNEL);
 
 	if (!pFirmware->mpCalibrations) {
 		dev_err(pTAS2557->dev, "%s:mpCalibrations failed to allocate memroy\n", __func__);

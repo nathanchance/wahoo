@@ -4799,9 +4799,9 @@ int mdss_mdp_gamut_config(struct msm_fb_data_type *mfd,
 		addr = mdss_mdp_get_dspp_addr_off(dspp_num) +
 			  MDSS_MDP_REG_DSPP_GAMUT_BASE;
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
-			r_tbl[i] = kcalloc(config->tbl_size[i],
-					   sizeof(uint16_t),
-					   GFP_KERNEL);
+			r_tbl[i] = kzalloc(
+				sizeof(uint16_t) * config->tbl_size[i],
+				GFP_KERNEL);
 			if (!r_tbl[i]) {
 				pr_err("%s: alloc failed\n", __func__);
 				ret = -ENOMEM;
@@ -4823,9 +4823,9 @@ int mdss_mdp_gamut_config(struct msm_fb_data_type *mfd,
 			}
 		}
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
-			g_tbl[i] = kcalloc(config->tbl_size[i],
-					   sizeof(uint16_t),
-					   GFP_KERNEL);
+			g_tbl[i] = kzalloc(
+				sizeof(uint16_t) * config->tbl_size[i],
+				GFP_KERNEL);
 			if (!g_tbl[i]) {
 				pr_err("%s: alloc failed\n", __func__);
 				ret = -ENOMEM;
@@ -4847,9 +4847,9 @@ int mdss_mdp_gamut_config(struct msm_fb_data_type *mfd,
 			}
 		}
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
-			b_tbl[i] = kcalloc(config->tbl_size[i],
-					   sizeof(uint16_t),
-					   GFP_KERNEL);
+			b_tbl[i] = kzalloc(
+				sizeof(uint16_t) * config->tbl_size[i],
+				GFP_KERNEL);
 			if (!b_tbl[i]) {
 				pr_err("%s: alloc failed\n", __func__);
 				ret = -ENOMEM;
@@ -5585,9 +5585,8 @@ int mdss_mdp_hist_collect(struct mdp_histogram_data *hist)
 			goto hist_collect_exit;
 		}
 		if (pipe_cnt > 1) {
-			hist_concat = kcalloc(HIST_V_SIZE * pipe_cnt,
-					      sizeof(u32),
-					      GFP_KERNEL);
+			hist_concat = kzalloc(HIST_V_SIZE * pipe_cnt *
+						sizeof(u32), GFP_KERNEL);
 			if (!hist_concat) {
 				ret = -ENOMEM;
 				goto hist_collect_exit;
@@ -6768,8 +6767,8 @@ int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets)
 	u32 i;
 	int rc = 0;
 
-	mdata->ad_off = devm_kcalloc(&mdata->pdev->dev,
-				mdata->nad_cfgs, sizeof(struct mdss_mdp_ad),
+	mdata->ad_off = devm_kzalloc(&mdata->pdev->dev,
+				sizeof(struct mdss_mdp_ad) * mdata->nad_cfgs,
 				GFP_KERNEL);
 
 	if (!mdata->ad_off) {
@@ -6777,8 +6776,8 @@ int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets)
 		return -ENOMEM;
 	}
 
-	mdata->ad_cfgs = devm_kcalloc(&mdata->pdev->dev,
-			mdata->nad_cfgs, sizeof(struct mdss_ad_info),
+	mdata->ad_cfgs = devm_kzalloc(&mdata->pdev->dev,
+			sizeof(struct mdss_ad_info) * mdata->nad_cfgs,
 			GFP_KERNEL);
 
 	if (!mdata->ad_cfgs) {

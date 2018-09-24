@@ -551,8 +551,8 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 
 	/* Allocate the private data and the DAI link array */
 	priv = devm_kzalloc(dev,
-			    CHECKME_struct_size(&*priv, *dai_link, num_links),
-			    GFP_KERNEL);
+			sizeof(*priv) + sizeof(*dai_link) * num_links,
+			GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -567,8 +567,8 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 	priv->gpio_mic_det = -ENOENT;
 
 	/* Get room for the other properties */
-	priv->dai_props = devm_kcalloc(dev,
-			num_links, sizeof(*priv->dai_props),
+	priv->dai_props = devm_kzalloc(dev,
+			sizeof(*priv->dai_props) * num_links,
 			GFP_KERNEL);
 	if (!priv->dai_props)
 		return -ENOMEM;

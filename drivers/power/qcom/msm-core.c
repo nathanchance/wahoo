@@ -59,13 +59,14 @@ static type **allocate_2d_array_##type(int idx)\
 	type **ptr = NULL;\
 	if (!idx) \
 		return ERR_PTR(-EINVAL);\
-	ptr = kcalloc(TEMP_DATA_POINTS, sizeof(*ptr), \
+	ptr = kzalloc(sizeof(*ptr) * TEMP_DATA_POINTS, \
 				GFP_KERNEL);\
 	if (!ptr) { \
 		return ERR_PTR(-ENOMEM); \
 	} \
 	for (i = 0; i < TEMP_DATA_POINTS; i++) { \
-		ptr[i] = kcalloc(idx, sizeof(*ptr[i]), GFP_KERNEL);\
+		ptr[i] = kzalloc(sizeof(*ptr[i]) * \
+					idx, GFP_KERNEL);\
 		if (!ptr[i]) {\
 			goto done;\
 		} \
@@ -594,8 +595,8 @@ static int msm_core_stats_init(struct device *dev, int cpu)
 	cpu_stats[cpu].throttling = false;
 
 	cpu_stats[cpu].len = cpu_node->sp->num_of_freqs;
-	pstate = devm_kcalloc(dev,
-		cpu_node->sp->num_of_freqs, sizeof(*pstate),
+	pstate = devm_kzalloc(dev,
+		sizeof(*pstate) * cpu_node->sp->num_of_freqs,
 		GFP_KERNEL);
 	if (!pstate)
 		return -ENOMEM;
@@ -675,8 +676,8 @@ static int msm_get_voltage_levels(struct device *dev, int cpu,
 	if (!cpu_dev)
 		return -ENODEV;
 
-	voltage = devm_kcalloc(dev,
-			sp->num_of_freqs, sizeof(*voltage), GFP_KERNEL);
+	voltage = devm_kzalloc(dev,
+			sizeof(*voltage) * sp->num_of_freqs, GFP_KERNEL);
 
 	if (!voltage)
 		return -ENOMEM;

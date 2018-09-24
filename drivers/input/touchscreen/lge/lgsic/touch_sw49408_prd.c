@@ -1792,7 +1792,7 @@ static ssize_t show_ocd(struct device *dev, char *buf)
 	int index[11] = {0, 6, 12, 18, 30, 42, 52, 60, 68, 86, 101};
 	int order[11] = {6, 6, 6, 12, 12, 10, 8, 8, 18, 15, 3};
 
-	ocd = kcalloc(OCD_SIZE, sizeof(uint8_t), GFP_KERNEL);
+	ocd = kzalloc(sizeof(uint8_t) * (OCD_SIZE), GFP_KERNEL);
 
 	if (ocd == NULL) {
 		TOUCH_E("ocd mem_error\n");
@@ -1847,7 +1847,7 @@ static ssize_t show_delta(struct device *dev, char *buf)
 	int i = 0;
 	int j = 0;
 
-	delta = kcalloc(COL_SIZE * ROW_SIZE, sizeof(int16_t), GFP_KERNEL);
+	delta = kzalloc(sizeof(int16_t) * (COL_SIZE*ROW_SIZE), GFP_KERNEL);
 
 	if (delta == NULL) {
 		TOUCH_E("delta mem_error\n");
@@ -1944,7 +1944,7 @@ static ssize_t show_rawdata(struct device *dev, char *buf)
 	int i = 0;
 	int j = 0;
 
-	rawdata = kcalloc(COL_SIZE * ROW_SIZE, sizeof(int16_t), GFP_KERNEL);
+	rawdata = kzalloc(sizeof(int16_t) * (COL_SIZE*ROW_SIZE), GFP_KERNEL);
 
 	if (rawdata == NULL) {
 		TOUCH_E("mem_error\n");
@@ -2049,8 +2049,7 @@ static ssize_t show_pt_data(struct device *dev, char *buf)
 	int i = 0;
 	int j = 0;
 
-	ptdata = kzalloc(array3_size(sizeof(u8) * ROW_SIZE, COL_SIZE, RAWDATA_SIZE),
-			 GFP_KERNEL);
+	ptdata = kzalloc(sizeof(u8) * ROW_SIZE*COL_SIZE*RAWDATA_SIZE, GFP_KERNEL);
 
 	if (ptdata == NULL) {
 		TOUCH_E("mem_error\n");

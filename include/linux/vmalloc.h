@@ -6,7 +6,6 @@
 #include <linux/list.h>
 #include <asm/page.h>		/* pgprot_t */
 #include <linux/rbtree.h>
-#include <linux/overflow.h>
 
 struct vm_area_struct;		/* vma defining user mapping in mm_types.h */
 

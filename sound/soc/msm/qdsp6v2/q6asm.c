@@ -273,7 +273,7 @@ static ssize_t audio_output_latency_dbgfs_write(struct file *file,
 		pr_err("%s: err count is more %zd\n", __func__, count);
 		return -EINVAL;
 	} else {
-		temp  = kmalloc(2, GFP_KERNEL);
+		temp  = kmalloc(2*sizeof(char), GFP_KERNEL);
 	}
 
 	out_cold_index = 0;
@@ -330,7 +330,7 @@ static ssize_t audio_input_latency_dbgfs_write(struct file *file,
 		pr_err("%s: err count is more %zd\n", __func__, count);
 		return -EINVAL;
 	} else {
-		temp  = kmalloc(2, GFP_KERNEL);
+		temp  = kmalloc(2*sizeof(char), GFP_KERNEL);
 	}
 	if (temp) {
 		if (copy_from_user(temp, buf, 2*sizeof(char))) {
@@ -6442,7 +6442,7 @@ static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 		return -EINVAL;
 	}
 
-	buffer_node = kcalloc(bufcnt, sizeof(struct asm_buffer_node),
+	buffer_node = kzalloc(sizeof(struct asm_buffer_node) * bufcnt,
 				GFP_KERNEL);
 	if (!buffer_node) {
 		pr_err("%s: Mem alloc failed for asm_buffer_node\n",

@@ -1392,17 +1392,17 @@ static inline void set_cmdline(int idx, const char *cmdline)
 static int allocate_cmdlines_buffer(unsigned int val,
 				    struct saved_cmdlines_buffer *s)
 {
-	s->map_cmdline_to_pid = vmalloc(array_size(val, sizeof(*s->map_cmdline_to_pid)));
+	s->map_cmdline_to_pid = vmalloc(val * sizeof(*s->map_cmdline_to_pid));
 	if (!s->map_cmdline_to_pid)
 		return -ENOMEM;
 
-	s->saved_cmdlines = vmalloc(array_size(TASK_COMM_LEN, val));
+	s->saved_cmdlines = vmalloc(val * TASK_COMM_LEN);
 	if (!s->saved_cmdlines) {
 		vfree(s->map_cmdline_to_pid);
 		return -ENOMEM;
 	}
 
-	s->saved_tgids = vmalloc(array_size(val, sizeof(*s->saved_tgids)));
+	s->saved_tgids = vmalloc(val * sizeof(*s->saved_tgids));
 	if (!s->saved_tgids) {
 		vfree(s->saved_cmdlines);
 		vfree(s->map_cmdline_to_pid);
@@ -4169,7 +4169,7 @@ trace_insert_enum_map_file(struct module *mod, struct trace_enum_map **start,
 	 * where the head holds the module and length of array, and the
 	 * tail holds a pointer to the next list.
 	 */
-	map_array = kmalloc_array(len + 2, sizeof(*map_array), GFP_KERNEL);
+	map_array = kmalloc(sizeof(*map_array) * (len + 2), GFP_KERNEL);
 	if (!map_array) {
 		pr_warning("Unable to allocate trace enum mapping\n");
 		return;
@@ -4240,7 +4240,7 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	int pid;
 	int i;
 
-	file_buf = vmalloc(array_size(savedcmd->cmdline_num, (16 + 1 + 16)));
+	file_buf = vmalloc(savedcmd->cmdline_num*(16+1+16));
 	if (!file_buf)
 		return -ENOMEM;
 

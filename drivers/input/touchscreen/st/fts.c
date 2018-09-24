@@ -385,7 +385,7 @@ static ssize_t stm_fts_cmd_store(struct device *dev, struct device_attribute *at
 	int n;
 	char *p = (char *) buf;
 
-	typeOfComand = (u32 *) kmalloc_array(8, sizeof(u32), GFP_KERNEL);
+	typeOfComand = (u32 *) kmalloc(8 * sizeof (u32), GFP_KERNEL);
 	if (typeOfComand == NULL) {
 		logError(1,  "%s impossible to allocate typeOfComand!\n", tag);
 		return count;
@@ -1381,9 +1381,8 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 {
 	int i, error = 0;
 
-	info->event_dispatch_table = kcalloc(EVENTID_LAST,
-					     sizeof(event_dispatch_handler_t),
-					     GFP_KERNEL);
+	info->event_dispatch_table = kzalloc(
+			sizeof (event_dispatch_handler_t) * EVENTID_LAST, GFP_KERNEL);
 
 	if (!info->event_dispatch_table) {
 		logError(1,  "%s OOM allocating event dispatch table\n", tag);

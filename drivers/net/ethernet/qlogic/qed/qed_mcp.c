@@ -163,9 +163,8 @@ int qed_mcp_cmd_init(struct qed_hwfn *p_hwfn,
 	size = MFW_DRV_MSG_MAX_DWORDS(p_info->mfw_mb_length) * sizeof(u32);
 	p_info->mfw_mb_cur = kzalloc(size, GFP_ATOMIC);
 	p_info->mfw_mb_shadow =
-		kcalloc(MFW_DRV_MSG_MAX_DWORDS(p_info->mfw_mb_length),
-			sizeof(u32),
-			GFP_ATOMIC);
+		kzalloc(sizeof(u32) * MFW_DRV_MSG_MAX_DWORDS(
+				p_info->mfw_mb_length), GFP_ATOMIC);
 	if (!p_info->mfw_mb_shadow || !p_info->mfw_mb_addr)
 		goto err;
 

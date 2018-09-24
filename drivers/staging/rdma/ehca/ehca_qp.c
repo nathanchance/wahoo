@@ -770,7 +770,8 @@ static struct ehca_qp *internal_create_qp(
 		if (!is_user) {
 			my_qp->sq_map.entries = my_qp->ipz_squeue.queue_length /
 				my_qp->ipz_squeue.qe_size;
-			my_qp->sq_map.map = vmalloc(array_size(sizeof(struct ehca_qmap_entry), my_qp->sq_map.entries));
+			my_qp->sq_map.map = vmalloc(my_qp->sq_map.entries *
+						    sizeof(struct ehca_qmap_entry));
 			if (!my_qp->sq_map.map) {
 				ehca_err(pd->device, "Couldn't allocate squeue "
 					 "map ret=%i", ret);
@@ -794,7 +795,8 @@ static struct ehca_qp *internal_create_qp(
 		if (!is_user) {
 			my_qp->rq_map.entries = my_qp->ipz_rqueue.queue_length /
 				my_qp->ipz_rqueue.qe_size;
-			my_qp->rq_map.map = vmalloc(array_size(sizeof(struct ehca_qmap_entry), my_qp->rq_map.entries));
+			my_qp->rq_map.map = vmalloc(my_qp->rq_map.entries *
+						    sizeof(struct ehca_qmap_entry));
 			if (!my_qp->rq_map.map) {
 				ehca_err(pd->device, "Couldn't allocate squeue "
 					 "map ret=%i", ret);
@@ -848,7 +850,7 @@ static struct ehca_qp *internal_create_qp(
 			 * for autodetect mode
 			 */
 			my_qp->mod_qp_parm =
-				kcalloc(EHCA_MOD_QP_PARM_MAX,
+				kzalloc(EHCA_MOD_QP_PARM_MAX *
 					sizeof(*my_qp->mod_qp_parm),
 					GFP_KERNEL);
 			if (!my_qp->mod_qp_parm) {

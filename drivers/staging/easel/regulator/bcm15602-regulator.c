@@ -1348,8 +1348,8 @@ static int bcm15602_probe(struct i2c_client *client,
 
 	/* initialize and register device regulators */
 	ddata->rdevs =
-		devm_kcalloc(dev,
-			     BCM15602_NUM_REGULATORS,
+		devm_kzalloc(dev,
+			     BCM15602_NUM_REGULATORS *
 			     sizeof(struct regulator_dev *),
 			     GFP_KERNEL);
 	if (!ddata->rdevs) {

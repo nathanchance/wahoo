@@ -550,8 +550,7 @@ static struct ion_platform_data *msm_ion_parse_dt(struct platform_device *pdev)
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
-	heaps = kcalloc(num_heaps, sizeof(struct ion_platform_heap),
-			GFP_KERNEL);
+	heaps = kzalloc(sizeof(struct ion_platform_heap)*num_heaps, GFP_KERNEL);
 	if (!heaps) {
 		kfree(pdata);
 		return ERR_PTR(-ENOMEM);

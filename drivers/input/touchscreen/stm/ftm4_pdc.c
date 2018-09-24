@@ -1830,7 +1830,7 @@ static void run_cx_data_read(void *device_data)
 		return;
 	}
 
-	pStr = kcalloc(4, (info->SenseChannelLength + 1), GFP_KERNEL);
+	pStr = kzalloc(4 * (info->SenseChannelLength + 1), GFP_KERNEL);
 	if (pStr == NULL) {
 		tsp_debug_info(&info->client->dev,
 				"%s: pStr kzalloc failed\n", __func__);
@@ -2024,7 +2024,7 @@ static void get_cx_all_data(void *device_data)
 	tx_num = info->ForceChannelLength;
 	rx_num = info->SenseChannelLength;
 
-	pStr = kcalloc(4, (info->SenseChannelLength + 1), GFP_KERNEL);
+	pStr = kzalloc(4 * (info->SenseChannelLength + 1), GFP_KERNEL);
 	if (pStr == NULL) {
 		tsp_debug_info(&info->client->dev,
 				"%s: pStr kzalloc failed\n", __func__);

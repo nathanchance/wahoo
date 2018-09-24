@@ -401,7 +401,7 @@ static int netvsc_init_buf(struct hv_device *device)
 					     BITS_PER_LONG);
 
 	net_device->send_section_map =
-		kcalloc(net_device->map_words, sizeof(ulong), GFP_KERNEL);
+		kzalloc(net_device->map_words * sizeof(ulong), GFP_KERNEL);
 	if (net_device->send_section_map == NULL) {
 		ret = -ENOMEM;
 		goto cleanup;

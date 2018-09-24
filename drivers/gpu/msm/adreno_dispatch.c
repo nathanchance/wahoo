@@ -1915,7 +1915,7 @@ static void recover_dispatch_q(struct kgsl_device *device,
 	int i;
 
 	/* Allocate memory to store the inflight commands */
-	replay = kcalloc(dispatch_q->inflight, sizeof(*replay), GFP_KERNEL);
+	replay = kzalloc(sizeof(*replay) * dispatch_q->inflight, GFP_KERNEL);
 
 	if (replay == NULL) {
 		unsigned int ptr = dispatch_q->head;

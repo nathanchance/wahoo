@@ -832,7 +832,7 @@ int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
 	 * Allocate enough for one entry per sc_list entry, plus end of list.
 	 */
 	maxsg = sgl->n_num + 1;
-	*sg = vmalloc(array_size(maxsg, sizeof(struct mnh_sg_entry)));
+	*sg = vmalloc(maxsg * sizeof(struct mnh_sg_entry));
 	if (!(*sg)) {
 		mnh_sg_release_from_dma_buf(sgl);
 		return -ENOMEM;
@@ -902,7 +902,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 	 * to crossing a page boundary, plus end of list.
 	 */
 	maxsg = (size / PAGE_SIZE) + 3;
-	*sg = vmalloc(array_size(maxsg, sizeof(struct mnh_sg_entry)));
+	*sg = vmalloc(maxsg * sizeof(struct mnh_sg_entry));
 	if (!(*sg))
 		return -ENOMEM;
 

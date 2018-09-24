@@ -1000,9 +1000,8 @@ static int msm_isp_request_bufq(struct msm_isp_buf_mgr *buf_mgr,
 		return -EINVAL;
 	}
 
-	bufq->bufs = kcalloc(buf_request->num_buf,
-			     sizeof(struct msm_isp_buffer),
-			     GFP_KERNEL);
+	bufq->bufs = kzalloc(sizeof(struct msm_isp_buffer) *
+		buf_request->num_buf, GFP_KERNEL);
 	if (!bufq->bufs) {
 		pr_err("No free memory for buf info\n");
 		msm_isp_free_bufq_handle(buf_mgr, buf_request->handle);

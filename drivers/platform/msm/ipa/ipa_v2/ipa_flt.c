@@ -843,14 +843,14 @@ int __ipa_commit_flt_v2(enum ipa_ip_type ip)
 	int i;
 	u16 avail;
 
-	desc = kcalloc(16, sizeof(*desc), GFP_ATOMIC);
+	desc = kzalloc(16 * sizeof(*desc), GFP_ATOMIC);
 	if (desc == NULL) {
 		IPAERR("fail to alloc desc blob ip %d\n", ip);
 		rc = -ENOMEM;
 		goto fail_desc;
 	}
 
-	cmd = kcalloc(16, sizeof(*cmd), GFP_ATOMIC);
+	cmd = kzalloc(16 * sizeof(*cmd), GFP_ATOMIC);
 	if (cmd == NULL) {
 		IPAERR("fail to alloc cmd blob ip %d\n", ip);
 		rc = -ENOMEM;
