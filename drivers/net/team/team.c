@@ -266,7 +266,7 @@ static int __team_options_register(struct team *team,
 	struct team_option **dst_opts;
 	int err;
 
-	dst_opts = kzalloc(sizeof(struct team_option *) * option_count,
+	dst_opts = kcalloc(option_count, sizeof(struct team_option *),
 			   GFP_KERNEL);
 	if (!dst_opts)
 		return -ENOMEM;
@@ -775,7 +775,8 @@ static int team_queue_override_init(struct team *team)
 
 	if (!queue_cnt)
 		return 0;
-	listarr = kmalloc(sizeof(struct list_head) * queue_cnt, GFP_KERNEL);
+	listarr = kmalloc_array(queue_cnt, sizeof(struct list_head),
+				GFP_KERNEL);
 	if (!listarr)
 		return -ENOMEM;
 	team->qom_lists = listarr;

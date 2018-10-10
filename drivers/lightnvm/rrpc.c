@@ -1007,12 +1007,11 @@ static int rrpc_map_init(struct rrpc *rrpc)
 	sector_t i;
 	int ret;
 
-	rrpc->trans_map = vzalloc(sizeof(struct rrpc_addr) * rrpc->nr_pages);
+	rrpc->trans_map = vzalloc(array_size(sizeof(struct rrpc_addr), rrpc->nr_pages));
 	if (!rrpc->trans_map)
 		return -ENOMEM;
 
-	rrpc->rev_trans_map = vmalloc(sizeof(struct rrpc_rev_addr)
-							* rrpc->nr_pages);
+	rrpc->rev_trans_map = vmalloc(array_size(sizeof(struct rrpc_rev_addr), rrpc->nr_pages));
 	if (!rrpc->rev_trans_map)
 		return -ENOMEM;
 
@@ -1129,8 +1128,7 @@ static int rrpc_luns_init(struct rrpc *rrpc, int lun_begin, int lun_end)
 		rrpc->total_blocks += dev->blks_per_lun;
 		rrpc->nr_pages += dev->sec_per_lun;
 
-		rlun->blocks = vzalloc(sizeof(struct rrpc_block) *
-						rrpc->dev->blks_per_lun);
+		rlun->blocks = vzalloc(array_size(sizeof(struct rrpc_block), rrpc->dev->blks_per_lun));
 		if (!rlun->blocks)
 			goto err;
 
