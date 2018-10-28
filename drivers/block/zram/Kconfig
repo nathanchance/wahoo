@@ -39,3 +39,6 @@ config ZRAM_MEMORY_TRACKING
 config ZRAM_DEFAULT_COMP_ALGORITHM
 	string "Default ZRAM algorithm"
 	default "lzo"
+
+config ZRAM_HIDE_LZO
+	bool "Hide LZO compression algorithm in available compression list"
