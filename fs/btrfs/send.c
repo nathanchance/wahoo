@@ -6062,16 +6062,14 @@ long btrfs_ioctl_send(struct file *mnt_file, void __user *arg_)
 	sctx->waiting_dir_moves = RB_ROOT;
 	sctx->orphan_dirs = RB_ROOT;
 
-	sctx->clone_roots = vzalloc(sizeof(struct clone_root) *
-			(arg->clone_sources_count + 1));
+	sctx->clone_roots = vzalloc(array_size(sizeof(struct clone_root), (arg->clone_sources_count + 1)));
 	if (!sctx->clone_roots) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
 	if (arg->clone_sources_count) {
-		clone_sources_tmp = vmalloc(arg->clone_sources_count *
-				sizeof(*arg->clone_sources));
+		clone_sources_tmp = vmalloc(array_size(sizeof(*arg->clone_sources), arg->clone_sources_count));
 		if (!clone_sources_tmp) {
 			ret = -ENOMEM;
 			goto out;

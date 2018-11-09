@@ -550,7 +550,8 @@ static struct ion_platform_data *msm_ion_parse_dt(struct platform_device *pdev)
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
-	heaps = kzalloc(sizeof(struct ion_platform_heap)*num_heaps, GFP_KERNEL);
+	heaps = kcalloc(num_heaps, sizeof(struct ion_platform_heap),
+			GFP_KERNEL);
 	if (!heaps) {
 		kfree(pdata);
 		return ERR_PTR(-ENOMEM);
@@ -679,6 +680,21 @@ int get_secure_vmid(unsigned long flags)
 		return VMID_CP_CAMERA_PREVIEW;
 	return -EINVAL;
 }
+
+bool is_buffer_hlos_assigned(struct ion_buffer *buffer)
+{
+	bool is_hlos = false;
+
+	if (buffer->heap->type == (enum ion_heap_type)ION_HEAP_TYPE_HYP_CMA &&
+	    (buffer->flags & ION_FLAG_CP_HLOS))
+		is_hlos = true;
+
+	if (get_secure_vmid(buffer->flags) <= 0)
+		is_hlos = true;
+
+	return is_hlos;
+}
+
 /* fix up the cases where the ioctl direction bits are incorrect */
 static unsigned int msm_ion_ioctl_dir(unsigned int cmd)
 {

@@ -461,7 +461,8 @@ static int __test_aead(struct crypto_aead *tfm, int enc,
 		goto out_nooutbuf;
 
 	/* avoid "the frame size is larger than 1024 bytes" compiler warning */
-	sg = kmalloc(sizeof(*sg) * 8 * (diff_dst ? 4 : 2), GFP_KERNEL);
+	sg = kmalloc(array3_size(sizeof(*sg), 8, (diff_dst ? 4 : 2)),
+		     GFP_KERNEL);
 	if (!sg)
 		goto out_nosg;
 	sgout = &sg[16];
@@ -3886,6 +3887,22 @@ static const struct alg_test_desc alg_test_descs[] = {
 				.decomp = {
 					.vecs = zlib_decomp_tv_template,
 					.count = ZLIB_DECOMP_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "zstd",
+		.test = alg_test_comp,
+		.fips_allowed = 1,
+		.suite = {
+			.comp = {
+				.comp = {
+					.vecs = zstd_comp_tv_template,
+					.count = ZSTD_COMP_TEST_VECTORS
+				},
+				.decomp = {
+					.vecs = zstd_decomp_tv_template,
+					.count = ZSTD_DECOMP_TEST_VECTORS
 				}
 			}
 		}

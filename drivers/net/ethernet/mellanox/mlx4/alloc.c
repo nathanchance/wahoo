@@ -185,8 +185,8 @@ int mlx4_bitmap_init(struct mlx4_bitmap *bitmap, u32 num, u32 mask,
 	bitmap->avail = num - reserved_top - reserved_bot;
 	bitmap->effective_len = bitmap->avail;
 	spin_lock_init(&bitmap->lock);
-	bitmap->table = kzalloc(BITS_TO_LONGS(bitmap->max) *
-				sizeof (long), GFP_KERNEL);
+	bitmap->table = kcalloc(BITS_TO_LONGS(bitmap->max), sizeof(long),
+				GFP_KERNEL);
 	if (!bitmap->table)
 		return -ENOMEM;
 
@@ -632,7 +632,7 @@ int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 
 		if (BITS_PER_LONG == 64) {
 			struct page **pages;
-			pages = kmalloc(sizeof *pages * buf->nbufs, gfp);
+			pages = kmalloc_array(buf->nbufs, sizeof(*pages), gfp);
 			if (!pages)
 				goto err_free;
 			for (i = 0; i < buf->nbufs; ++i)
